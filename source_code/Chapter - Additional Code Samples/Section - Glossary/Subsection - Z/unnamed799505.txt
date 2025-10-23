@@ -1,0 +1,21 @@
+// CUDA C++ example of PTX-level optimization for specific operations
+// This example demonstrates the use of PTX inline assembly for optimizing
+// a simple addition operation.
+
+__global__ void optimizedAddition(float* A, float* B, float* C, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        float a = A[idx];
+        float b = B[idx];
+        float c;
+
+        // PTX inline assembly for optimized addition
+        asm volatile (
+            "add.f32 %0, %1, %2;"  // PTX instruction for floating-point addition
+            : "=f"(c)              // Output operand
+            : "f"(a), "f"(b)       // Input operands
+        );
+
+        C[idx] = c;
+    }
+}
