@@ -1,0 +1,15 @@
+// CUDA kernel to perform sparse matrix-vector multiplication using CSR format
+__global__ void spmv_csr_kernel(int num_rows, const int *row_ptr, 
+                                 const int *col_idx, const float *values, 
+                                 const float *x, float *y) {
+    int row = blockIdx.x * blockDim.x + threadIdx.x; // Compute row index
+    if (row < num_rows) {
+        float dot_product = 0.0f; // Initialize dot product for this row
+        int row_start = row_ptr[row]; // Start index of the row in col_idx and values
+        int row_end = row_ptr[row + 1]; // End index of the row in col_idx and values
+        for (int j = row_start; j < row_end; j++) {
+            dot_product += values[j] * x[col_idx[j]]; // Accumulate product
+        }
+        y[row] = dot_product; // Store the result in the output vector
+    }
+}
