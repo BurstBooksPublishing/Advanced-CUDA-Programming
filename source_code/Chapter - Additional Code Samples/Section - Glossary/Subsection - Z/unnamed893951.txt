@@ -1,0 +1,73 @@
+#include 
+#include 
+#include 
+
+#define N 1024
+
+__global__ void raceConditionKernel(int *data) {
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    if (idx < N) {
+        // Potential race condition: multiple threads may write to data[idx] simultaneously
+        data[idx] += 1;
+    }
+}
+
+__global__ void raceDetectionKernel(int *data, int *flags) {
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    if (idx < N) {
+        // Check if the value has been modified by another thread
+        int old_value = data[idx];
+        __threadfence(); // Ensure memory operations are completed
+        if (data[idx] != old_value) {
+            flags[idx] = 1; // Flag the race condition
+        }
+    }
+}
+
+int main() {
+    int *h_data, *d_data;
+    int *h_flags, *d_flags;
+    size_t size = N * sizeof(int);
+
+    // Allocate host memory
+    h_data = (int *)malloc(size);
+    h_flags = (int *)malloc(size);
+
+    // Initialize host data
+    for (int i = 0; i < N; i++) {
+        h_data[i] = 0;
+        h_flags[i] = 0;
+    }
+
+    // Allocate device memory
+    cudaMalloc(&d_data, size);
+    cudaMalloc(&d_flags, size);
+
+    // Copy data to device
+    cudaMemcpy(d_data, h_data, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_flags, h_flags, size, cudaMemcpyHostToDevice);
+
+    // Launch the race condition kernel
+    raceConditionKernel<<<(N + 255) / 256, 256>>>(d_data);
+
+    // Launch the race detection kernel
+    raceDetectionKernel<<<(N + 255) / 256, 256>>>(d_data, d_flags);
+
+    // Copy flags back to host
+    cudaMemcpy(h_flags, d_flags, size, cudaMemcpyDeviceToHost);
+
+    // Check for race conditions
+    for (int i = 0; i < N; i++) {
+        if (h_flags[i] == 1) {
+            printf("Race condition detected at index %d\n", i);
+        }
+    }
+
+    // Free memory
+    free(h_data);
+    free(h_flags);
+    cudaFree(d_data);
+    cudaFree(d_flags);
+
+    return 0;
+}
