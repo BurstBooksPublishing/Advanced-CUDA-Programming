@@ -1,0 +1,33 @@
+__global__ void parallelBitonicSort(int *data, int j, int k) {
+    unsigned int i = threadIdx.x + blockDim.x * blockIdx.x;
+    unsigned int ij = i ^ j;
+    if (ij > i) {
+        if ((i & k) == 0 && data[i] > data[ij]) {
+            // Swap elements
+            int temp = data[i];
+            data[i] = data[ij];
+            data[ij] = temp;
+        }
+        if ((i & k) != 0 && data[i] < data[ij]) {
+            // Swap elements
+            int temp = data[i];
+            data[i] = data[ij];
+            data[ij] = temp;
+        }
+    }
+}
+
+void bitonicSort(int *h_data, int n) {
+    int *d_data;
+    cudaMalloc((void**)&d_data, n * sizeof(int));
+    cudaMemcpy(d_data, h_data, n * sizeof(int), cudaMemcpyHostToDevice);
+
+    for (int k = 2; k <= n; k <<= 1) {
+        for (int j = k >> 1; j > 0; j >>= 1) {
+            parallelBitonicSort<<<(n + 255) / 256, 256>>>(d_data, j, k);
+        }
+    }
+
+    cudaMemcpy(h_data, d_data, n * sizeof(int), cudaMemcpyDeviceToHost);
+    cudaFree(d_data);
+}
