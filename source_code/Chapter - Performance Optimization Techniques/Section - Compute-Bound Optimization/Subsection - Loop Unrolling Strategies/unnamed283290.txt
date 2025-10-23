@@ -1,0 +1,18 @@
+__global__ void unrolledMatrixMul(float* C, const float* A, const float* B, int N) {
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (row < N && col < N) {
+        float value = 0.0f;
+
+        // Unroll the loop by a factor of 4
+        for (int k = 0; k < N; k += 4) {
+            value += A[row * N + k] * B[k * N + col];
+            value += A[row * N + k + 1] * B[(k + 1) * N + col];
+            value += A[row * N + k + 2] * B[(k + 2) * N + col];
+            value += A[row * N + k + 3] * B[(k + 3) * N + col];
+        }
+
+        C[row * N + col] = value;
+    }
+}
