@@ -1,0 +1,61 @@
+// Example: Using Nsight Compute for advanced CUDA performance analysis
+#include 
+#include 
+
+__global__ void matrixMul(float* C, const float* A, const float* B, int N) {
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    if (row < N && col < N) {
+        float sum = 0.0f;
+        for (int k = 0; k < N; k++) {
+            sum += A[row * N + k] * B[k * N + col];
+        }
+        C[row * N + col] = sum;
+    }
+}
+
+int main() {
+    int N = 1024; // Matrix size
+    size_t size = N * N * sizeof(float);
+
+    // Allocate host and device memory
+    float *h_A = (float*)malloc(size);
+    float *h_B = (float*)malloc(size);
+    float *h_C = (float*)malloc(size);
+    float *d_A, *d_B, *d_C;
+    cudaMalloc(&d_A, size);
+    cudaMalloc(&d_B, size);
+    cudaMalloc(&d_C, size);
+
+    // Initialize matrices
+    for (int i = 0; i < N * N; i++) {
+        h_A[i] = static_cast(rand()) / RAND_MAX;
+        h_B[i] = static_cast(rand()) / RAND_MAX;
+    }
+
+    // Copy matrices to device
+    cudaMemcpy(d_A, h_A, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, h_B, size, cudaMemcpyHostToDevice);
+
+    // Launch kernel with Nsight Compute profiling
+    dim3 threadsPerBlock(16, 16);
+    dim3 blocksPerGrid((N + threadsPerBlock.x - 1) / threadsPerBlock.x,
+                       (N + threadsPerBlock.y - 1) / threadsPerBlock.y);
+
+    nvtxRangePushA("MatrixMulKernel"); // Mark kernel start for profiling
+    matrixMul<<>>(d_C, d_A, d_B, N);
+    nvtxRangePop(); // Mark kernel end for profiling
+
+    // Copy result back to host
+    cudaMemcpy(h_C, d_C, size, cudaMemcpyDeviceToHost);
+
+    // Free memory
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_C);
+    free(h_A);
+    free(h_B);
+    free(h_C);
+
+    return 0;
+}
