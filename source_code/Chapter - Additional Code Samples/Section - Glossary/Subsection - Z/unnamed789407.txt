@@ -1,0 +1,55 @@
+#include 
+#include 
+
+__global__ void warpShuffleExample(int *input, int *output) {
+    int tid = threadIdx.x;
+    int laneId = tid % warpSize;  // Lane ID within the warp
+
+    // Each thread loads a value from global memory
+    int value = input[tid];
+
+    // Perform a warp-level shuffle to broadcast the value from lane 0
+    int broadcastValue = __shfl_sync(0xFFFFFFFF, value, 0);
+
+    // Perform a warp-level shuffle to get the value from the next lane
+    int nextLaneValue = __shfl_sync(0xFFFFFFFF, value, (laneId + 1) % warpSize);
+
+    // Perform a warp-level reduction using shuffle operations
+    int sum = value;
+    for (int offset = warpSize / 2; offset > 0; offset /= 2) {
+        sum += __shfl_down_sync(0xFFFFFFFF, sum, offset);
+    }
+
+    // Store the results in global memory
+    output[tid] = broadcastValue + nextLaneValue + sum;
+}
+
+int main() {
+    const int N = 32;  // Number of threads (equal to warp size)
+    int h_input[N], h_output[N];
+    int *d_input, *d_output;
+
+    // Initialize input data
+    for (int i = 0; i < N; i++) {
+        h_input[i] = i + 1;
+    }
+
+    // Allocate device memory
+    cudaMalloc((void**)&d_input, N * sizeof(int));
+    cudaMalloc((void**)&d_output, N * sizeof(int));
+
+    // Copy input data to device
+    cudaMemcpy(d_input, h_input, N * sizeof(int), cudaMemcpyHostToDevice);
+
+    // Launch kernel with a single warp
+    warpShuffleExample<<<1, N>>>(d_input, d_output);
+
+    // Copy results back to host
+    cudaMemcpy(h_output, d_output, N * sizeof(int), cudaMemcpyDeviceToHost);
+
+    // Free device memory
+    cudaFree(d_input);
+    cudaFree(d_output);
+
+    return 0;
+}
