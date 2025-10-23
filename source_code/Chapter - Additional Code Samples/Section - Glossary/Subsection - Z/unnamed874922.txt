@@ -1,0 +1,62 @@
+#include 
+#include 
+#include 
+
+// Function to compute workload on each GPU
+__global__ void computeWorkload(int *data, int size, int offset) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x + offset;
+    if (idx < size) {
+        data[idx] = data[idx] * 2;  // Example computation
+    }
+}
+
+int main() {
+    int numGPUs;
+    cudaGetDeviceCount(&numGPUs);
+    std::vector data(1000000, 1);  // Example data
+    int dataSize = data.size();
+    int chunkSize = dataSize / numGPUs;
+
+    // Allocate memory on each GPU
+    std::vector d_data(numGPUs);
+    for (int i = 0; i < numGPUs; ++i) {
+        cudaSetDevice(i);
+        cudaMalloc(&d_data[i], chunkSize * sizeof(int));
+    }
+
+    // Distribute workload across GPUs
+    for (int i = 0; i < numGPUs; ++i) {
+        cudaSetDevice(i);
+        int offset = i * chunkSize;
+        int size = (i == numGPUs - 1) ? dataSize - offset : chunkSize;
+        cudaMemcpy(d_data[i], data.data() + offset, size * sizeof(int), 
+                   cudaMemcpyHostToDevice);
+        computeWorkload<<<(size + 255) / 256, 256>>>(d_data[i], size, offset);
+    }
+
+    // Synchronize all GPUs
+    for (int i = 0; i < numGPUs; ++i) {
+        cudaSetDevice(i);
+        cudaDeviceSynchronize();
+    }
+
+    // Gather results back to host
+    for (int i = 0; i < numGPUs; ++i) {
+        cudaSetDevice(i);
+        int offset = i * chunkSize;
+        int size = (i == numGPUs - 1) ? dataSize - offset : chunkSize;
+        cudaMemcpy(data.data() + offset, d_data[i], size * sizeof(int), 
+                   cudaMemcpyDeviceToHost);
+    }
+
+    // Free device memory
+    for (int i = 0; i < numGPUs; ++i) {
+        cudaSetDevice(i);
+        cudaFree(d_data[i]);
+    }
+
+    // Print result (for verification)
+    std::cout << "Result: " << data[0] << std::endl;
+
+    return 0;
+}
