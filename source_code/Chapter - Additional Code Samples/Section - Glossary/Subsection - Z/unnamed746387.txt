@@ -1,0 +1,50 @@
+// CUDA C++ example demonstrating branch prediction and handling divergence in CUDA kernels
+
+__global__ void branchDivergenceKernel(int *data, int *result, int n) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (idx < n) {
+        // Example of branch divergence: threads in the same warp take different paths
+        if (data[idx] % 2 == 0) {
+            // Even path: perform a simple operation
+            result[idx] = data[idx] * 2;
+        } else {
+            // Odd path: perform a different operation
+            result[idx] = data[idx] + 1;
+        }
+    }
+}
+
+int main() {
+    int n = 1024;
+    int *h_data = (int *)malloc(n * sizeof(int));
+    int *h_result = (int *)malloc(n * sizeof(int));
+
+    // Initialize host data
+    for (int i = 0; i < n; i++) {
+        h_data[i] = i;
+    }
+
+    int *d_data, *d_result;
+    cudaMalloc((void **)&d_data, n * sizeof(int));
+    cudaMalloc((void **)&d_result, n * sizeof(int));
+
+    // Copy data to device
+    cudaMemcpy(d_data, h_data, n * sizeof(int), cudaMemcpyHostToDevice);
+
+    // Launch kernel with 1 block and 1024 threads
+    branchDivergenceKernel<<<1, 1024>>>(d_data, d_result, n);
+
+    // Copy result back to host
+    cudaMemcpy(h_result, d_result, n * sizeof(int), cudaMemcpyDeviceToHost);
+
+    // Free device memory
+    cudaFree(d_data);
+    cudaFree(d_result);
+
+    // Free host memory
+    free(h_data);
+    free(h_result);
+
+    return 0;
+}
