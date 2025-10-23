@@ -1,0 +1,21 @@
+__global__ void warpPrimitivesExample(int *data, int *output, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= N) return;
+
+    int laneId = threadIdx.x % warpSize; // Lane ID within the warp
+    int warpId = threadIdx.x / warpSize; // Warp ID within the block
+
+    // Shuffle data within the warp
+    int shuffledValue = __shfl_sync(0xFFFFFFFF, data[idx], laneId ^ 1);
+
+    // Perform a warp-level reduction
+    int sum = data[idx];
+    for (int offset = warpSize / 2; offset > 0; offset /= 2) {
+        sum += __shfl_down_sync(0xFFFFFFFF, sum, offset);
+    }
+
+    // Store the result if the thread is the first in the warp
+    if (laneId == 0) {
+        output[warpId] = sum;
+    }
+}
