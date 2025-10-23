@@ -1,0 +1,78 @@
+#include 
+#include 
+#include 
+
+#define N 1024  // Size of the array
+
+__global__ void vectorAdd(int *A, int *B, int *C, int n) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        C[idx] = A[idx] + B[idx];
+    }
+}
+
+int main(int argc, char **argv) {
+    int rank, size;
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+    int *h_A, *h_B, *h_C;
+    int *d_A, *d_B, *d_C;
+
+    // Allocate host memory
+    h_A = (int *)malloc(N * sizeof(int));
+    h_B = (int *)malloc(N * sizeof(int));
+    h_C = (int *)malloc(N * sizeof(int));
+
+    // Initialize host arrays
+    for (int i = 0; i < N; i++) {
+        h_A[i] = i;
+        h_B[i] = i * 2;
+    }
+
+    // Allocate device memory
+    cudaMalloc((void **)&d_A, N * sizeof(int));
+    cudaMalloc((void **)&d_B, N * sizeof(int));
+    cudaMalloc((void **)&d_C, N * sizeof(int));
+
+    // Copy data to device
+    cudaMemcpy(d_A, h_A, N * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, h_B, N * sizeof(int), cudaMemcpyHostToDevice);
+
+    // Launch kernel
+    int blockSize = 256;
+    int numBlocks = (N + blockSize - 1) / blockSize;
+    vectorAdd<<>>(d_A, d_B, d_C, N);
+
+    // Copy result back to host
+    cudaMemcpy(h_C, d_C, N * sizeof(int), cudaMemcpyDeviceToHost);
+
+    // Verify result
+    bool success = true;
+    for (int i = 0; i < N; i++) {
+        if (h_C[i] != h_A[i] + h_B[i]) {
+            success = false;
+            break;
+        }
+    }
+
+    if (success) {
+        std::cout << "Rank " << rank << ": Vector addition successful!" << std::endl;
+    } else {
+        std::cout << "Rank " << rank << ": Vector addition failed!" << std::endl;
+    }
+
+    // Free device memory
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_C);
+
+    // Free host memory
+    free(h_A);
+    free(h_B);
+    free(h_C);
+
+    MPI_Finalize();
+    return 0;
+}
