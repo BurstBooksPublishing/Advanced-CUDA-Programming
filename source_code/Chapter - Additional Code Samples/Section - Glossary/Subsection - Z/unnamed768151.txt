@@ -1,0 +1,67 @@
+// CUDA C++ code showcasing cache line utilization techniques for memory access
+
+__global__ void cacheLineOptimizedKernel(float* A, float* B, float* C, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Shared memory to cache data for coalesced memory access
+    __shared__ float sharedA[32]; // Assuming 32 threads per block
+    __shared__ float sharedB[32];
+
+    // Load data into shared memory to utilize cache lines efficiently
+    if (idx < N) {
+        sharedA[threadIdx.x] = A[idx];
+        sharedB[threadIdx.x] = B[idx];
+    }
+    __syncthreads(); // Ensure all threads have loaded data into shared memory
+
+    // Perform computation using cached data
+    if (idx < N) {
+        C[idx] = sharedA[threadIdx.x] + sharedB[threadIdx.x];
+    }
+}
+
+int main() {
+    int N = 1024; // Size of the arrays
+    size_t size = N * sizeof(float);
+
+    // Allocate host memory
+    float* h_A = (float*)malloc(size);
+    float* h_B = (float*)malloc(size);
+    float* h_C = (float*)malloc(size);
+
+    // Initialize host arrays
+    for (int i = 0; i < N; i++) {
+        h_A[i] = static_cast(i);
+        h_B[i] = static_cast(i * 2);
+    }
+
+    // Allocate device memory
+    float *d_A, *d_B, *d_C;
+    cudaMalloc(&d_A, size);
+    cudaMalloc(&d_B, size);
+    cudaMalloc(&d_C, size);
+
+    // Copy data from host to device
+    cudaMemcpy(d_A, h_A, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, h_B, size, cudaMemcpyHostToDevice);
+
+    // Launch the kernel with 32 threads per block
+    int threadsPerBlock = 32;
+    int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
+    cacheLineOptimizedKernel<<>>(d_A, d_B, d_C, N);
+
+    // Copy result back to host
+    cudaMemcpy(h_C, d_C, size, cudaMemcpyDeviceToHost);
+
+    // Free device memory
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_C);
+
+    // Free host memory
+    free(h_A);
+    free(h_B);
+    free(h_C);
+
+    return 0;
+}
