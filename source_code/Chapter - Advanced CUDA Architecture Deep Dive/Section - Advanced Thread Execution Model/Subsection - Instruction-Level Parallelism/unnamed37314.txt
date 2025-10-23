@@ -1,0 +1,15 @@
+__global__ void instructionLevelParallelismKernel(float* A, float* B, float* C, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        // Perform multiple independent operations to exploit ILP
+        float a = A[idx];
+        float b = B[idx];
+        float c1 = a + b;  // Independent operation 1
+        float c2 = a * b;  // Independent operation 2
+        float c3 = a - b;  // Independent operation 3
+        float c4 = a / b;  // Independent operation 4
+
+        // Combine results to ensure all operations are used
+        C[idx] = (c1 + c2) * (c3 - c4);
+    }
+}
