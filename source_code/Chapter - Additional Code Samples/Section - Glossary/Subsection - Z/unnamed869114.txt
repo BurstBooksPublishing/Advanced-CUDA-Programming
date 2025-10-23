@@ -1,0 +1,69 @@
+#include 
+#include 
+
+#define CHECK(call) \
+{ \
+    const cudaError_t error = call; \
+    if (error != cudaSuccess) \
+    { \
+        std::cerr << "Error: " << __FILE__ << ":" << __LINE__ << ", " \
+                  << cudaGetErrorString(error) << std::endl; \
+        exit(1); \
+    } \
+}
+
+int main() {
+    int num_gpus = 0;
+    CHECK(cudaGetDeviceCount(&num_gpus));
+    if (num_gpus < 2) {
+        std::cerr << "At least 2 GPUs are required for P2P communication." << std::endl;
+        return 1;
+    }
+
+    // Enable P2P access between GPUs
+    for (int i = 0; i < num_gpus; ++i) {
+        CHECK(cudaSetDevice(i));
+        for (int j = 0; j < num_gpus; ++j) {
+            if (i == j) continue;
+            int can_access = 0;
+            CHECK(cudaDeviceCanAccessPeer(&can_access, i, j));
+            if (can_access) {
+                CHECK(cudaDeviceEnablePeerAccess(j, 0));
+                std::cout << "GPU " << i << " can access GPU " << j << std::endl;
+            }
+        }
+    }
+
+    // Allocate memory on each GPU
+    const size_t size = 1024 * 1024; // 1 MB
+    float *d_data[num_gpus];
+    for (int i = 0; i < num_gpus; ++i) {
+        CHECK(cudaSetDevice(i));
+        CHECK(cudaMalloc(&d_data[i], size * sizeof(float)));
+    }
+
+    // Perform P2P memory copy from GPU 0 to GPU 1
+    CHECK(cudaSetDevice(0));
+    CHECK(cudaMemcpyPeer(d_data[1], 1, d_data[0], 0, size * sizeof(float)));
+
+    // Cleanup
+    for (int i = 0; i < num_gpus; ++i) {
+        CHECK(cudaSetDevice(i));
+        CHECK(cudaFree(d_data[i]));
+    }
+
+    // Disable P2P access
+    for (int i = 0; i < num_gpus; ++i) {
+        CHECK(cudaSetDevice(i));
+        for (int j = 0; j < num_gpus; ++j) {
+            if (i == j) continue;
+            int can_access = 0;
+            CHECK(cudaDeviceCanAccessPeer(&can_access, i, j));
+            if (can_access) {
+                CHECK(cudaDeviceDisablePeerAccess(j));
+            }
+        }
+    }
+
+    return 0;
+}
