@@ -1,0 +1,54 @@
+// CUDA Event-Based Synchronization Example
+#include 
+#include 
+
+__global__ void kernel(float *data, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        data[idx] = data[idx] * 2.0f; // Simple computation
+    }
+}
+
+int main() {
+    int N = 1 << 20; // 1 million elements
+    size_t size = N * sizeof(float);
+
+    // Allocate host and device memory
+    float *h_data = (float *)malloc(size);
+    float *d_data;
+    cudaMalloc(&d_data, size);
+
+    // Initialize host data
+    for (int i = 0; i < N; i++) {
+        h_data[i] = static_cast(i);
+    }
+
+    // Copy data to device
+    cudaMemcpy(d_data, h_data, size, cudaMemcpyHostToDevice);
+
+    // Create CUDA events for synchronization
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
+    // Launch kernel with event recording
+    cudaEventRecord(start);
+    kernel<<<(N + 255) / 256, 256>>>(d_data, N);
+    cudaEventRecord(stop);
+
+    // Synchronize using the event
+    cudaEventSynchronize(stop);
+
+    // Calculate elapsed time
+    float milliseconds = 0;
+    cudaEventElapsedTime(&milliseconds, start, stop);
+    printf("Kernel execution time: %f ms\n", milliseconds);
+
+    // Cleanup
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
+    cudaFree(d_data);
+    free(h_data);
+
+    return 0;
+}
