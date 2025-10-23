@@ -1,0 +1,19 @@
+__global__ void defragmentMemory(int* fragmentedData, int* defragmentedData, 
+                                  int* indices, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size) {
+        // Copy data from fragmented to defragmented memory using indices
+        defragmentedData[idx] = fragmentedData[indices[idx]];
+    }
+}
+
+void performDefragmentation(int* fragmentedData, int* defragmentedData, 
+                           int* indices, int size) {
+    int blockSize = 256;
+    int gridSize = (size + blockSize - 1) / blockSize;
+    
+    // Launch the defragmentation kernel
+    defragmentMemory<<>>(fragmentedData, defragmentedData, 
+                                               indices, size);
+    cudaDeviceSynchronize(); // Ensure kernel execution is complete
+}
