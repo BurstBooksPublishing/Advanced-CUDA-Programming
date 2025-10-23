@@ -1,0 +1,38 @@
+#include 
+#include 
+
+#define BLOCK_SIZE 256
+#define SLAB_SIZE 1024 * 1024 // 1 MB slab size
+
+__device__ void* slab_alloc(int size) {
+    extern __shared__ char shared_memory[];
+    static __shared__ int offset;
+
+    if (threadIdx.x == 0) {
+        offset = 0;
+    }
+    __syncthreads();
+
+    int old_offset = atomicAdd(&offset, size);
+    if (old_offset + size <= SLAB_SIZE) {
+        return &shared_memory[old_offset];
+    } else {
+        return nullptr; // Out of memory in the slab
+    }
+}
+
+__global__ void kernel() {
+    int* data = (int*)slab_alloc(sizeof(int) * BLOCK_SIZE);
+    if (data != nullptr) {
+        for (int i = threadIdx.x; i < BLOCK_SIZE; i += blockDim.x) {
+            data[i] = i;
+        }
+    }
+}
+
+int main() {
+    kernel<<<1, BLOCK_SIZE, SLAB_SIZE>>>();
+    cudaDeviceSynchronize();
+    std::cout << "Kernel executed successfully." << std::endl;
+    return 0;
+}
