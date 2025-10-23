@@ -1,0 +1,17 @@
+__global__ void deterministicKernel(float* input, float* output, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size) {
+        // Ensure deterministic execution by avoiding race conditions
+        float value = input[idx];
+        __syncthreads(); // Synchronize threads to maintain order
+        output[idx] = value * 2.0f; // Simple deterministic operation
+    }
+}
+
+void launchDeterministicKernel(float* d_input, float* d_output, int size) {
+    int threadsPerBlock = 256;
+    int blocksPerGrid = (size + threadsPerBlock - 1) / threadsPerBlock;
+    deterministicKernel<<>>(d_input, d_output, size);
+    cudaDeviceSynchronize(); // Ensure kernel completion for determinism
+}
+\ebd{lstlisting}
