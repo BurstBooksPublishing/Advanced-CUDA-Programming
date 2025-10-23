@@ -1,0 +1,59 @@
+#include 
+#include 
+#include 
+
+#define N 1024 // Size of the data array
+
+__global__ void kernel(int *d_array, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size) {
+        d_array[idx] *= 2; // Example computation
+    }
+}
+
+int main(int argc, char **argv) {
+    int rank, size;
+    int *h_array, *d_array;
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+    h_array = (int *)malloc(N * sizeof(int));
+    cudaMalloc((void **)&d_array, N * sizeof(int));
+
+    // Initialize host array
+    for (int i = 0; i < N; i++) {
+        h_array[i] = i + rank * N; // Unique data for each rank
+    }
+
+    // Copy data to device
+    cudaMemcpy(d_array, h_array, N * sizeof(int), cudaMemcpyHostToDevice);
+
+    // Launch kernel
+    kernel<<<(N + 255) / 256, 256>>>(d_array, N);
+
+    // Copy data back to host
+    cudaMemcpy(h_array, d_array, N * sizeof(int), cudaMemcpyDeviceToHost);
+
+    // Perform MPI communication (e.g., gather results)
+    int *gathered_array = nullptr;
+    if (rank == 0) {
+        gathered_array = (int *)malloc(N * size * sizeof(int));
+    }
+    MPI_Gather(h_array, N, MPI_INT, gathered_array, N, MPI_INT, 0, MPI_COMM_WORLD);
+
+    // Print results on rank 0
+    if (rank == 0) {
+        for (int i = 0; i < N * size; i++) {
+            std::cout << gathered_array[i] << " ";
+        }
+        std::cout << std::endl;
+        free(gathered_array);
+    }
+
+    // Cleanup
+    free(h_array);
+    cudaFree(d_array);
+    MPI_Finalize();
+    return 0;
+}
