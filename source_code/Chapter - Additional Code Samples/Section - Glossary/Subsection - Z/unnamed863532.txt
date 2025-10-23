@@ -1,0 +1,57 @@
+// CUDA C++ implementation of quantization for inference speedup
+// Quantization reduces precision of weights and activations to speed up inference
+
+__global__ void quantize_kernel(float* input, int8_t* output, float scale, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size) {
+        // Quantize input to 8-bit integer using scaling factor
+        output[idx] = static_cast(input[idx] * scale);
+    }
+}
+
+void quantize(float* input, int8_t* output, float scale, int size) {
+    int threads = 256;
+    int blocks = (size + threads - 1) / threads;
+    quantize_kernel<<>>(input, output, scale, size);
+}
+
+__global__ void dequantize_kernel(int8_t* input, float* output, float scale, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size) {
+        // Dequantize 8-bit integer back to floating point
+        output[idx] = static_cast(input[idx]) / scale;
+    }
+}
+
+void dequantize(int8_t* input, float* output, float scale, int size) {
+    int threads = 256;
+    int blocks = (size + threads - 1) / threads;
+    dequantize_kernel<<>>(input, output, scale, size);
+}
+
+// Example usage for inference optimization
+void inference_optimization(float* input, float* output, int size) {
+    int8_t* quantized_input;
+    float* dequantized_output;
+    float scale = 127.0f / max_abs_value(input, size); // Compute scaling factor
+
+    // Allocate memory for quantized and dequantized data
+    cudaMalloc(&quantized_input, size * sizeof(int8_t));
+    cudaMalloc(&dequantized_output, size * sizeof(float));
+
+    // Quantize input data
+    quantize(input, quantized_input, scale, size);
+
+    // Perform inference on quantized data (e.g., matrix multiplication)
+    // ...
+
+    // Dequantize output data
+    dequantize(quantized_input, dequantized_output, scale, size);
+
+    // Copy dequantized output back to host
+    cudaMemcpy(output, dequantized_output, size * sizeof(float), cudaMemcpyDeviceToHost);
+
+    // Free device memory
+    cudaFree(quantized_input);
+    cudaFree(dequantized_output);
+}
