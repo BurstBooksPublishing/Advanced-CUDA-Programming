@@ -1,0 +1,24 @@
+__global__ void bankConflictFreeKernel(float* output, const float* input, int width) {
+    // Allocate shared memory with padding to avoid bank conflicts
+    __shared__ float sharedMem[32][32 + 1]; // 32x32 matrix with 1-element padding
+
+    int tx = threadIdx.x;
+    int ty = threadIdx.y;
+    int row = blockIdx.y * blockDim.y + ty;
+    int col = blockIdx.x * blockDim.x + tx;
+
+    // Load data into shared memory with padding
+    if (row < width && col < width) {
+        sharedMem[ty][tx] = input[row * width + col];
+    }
+    __syncthreads();
+
+    // Perform computation using shared memory
+    float result = 0.0f;
+    if (row < width && col < width) {
+        for (int i = 0; i < 32; ++i) {
+            result += sharedMem[ty][i] * sharedMem[i][tx];
+        }
+        output[row * width + col] = result;
+    }
+}
