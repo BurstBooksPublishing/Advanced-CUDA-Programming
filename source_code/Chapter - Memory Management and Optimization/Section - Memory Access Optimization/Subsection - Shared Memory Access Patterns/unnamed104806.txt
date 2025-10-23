@@ -1,0 +1,29 @@
+__global__ void sharedMemoryAccessPattern(float* input, float* output, int N) {
+    // Declare shared memory array
+    extern __shared__ float sharedData[];
+
+    // Calculate thread ID and stride
+    int tid = threadIdx.x;
+    int stride = blockDim.x;
+
+    // Load data into shared memory with coalesced access
+    for (int i = tid; i < N; i += stride) {
+        sharedData[i] = input[i];
+    }
+
+    // Synchronize to ensure all threads have loaded data
+    __syncthreads();
+
+    // Perform computation using shared memory
+    for (int i = tid; i < N; i += stride) {
+        sharedData[i] = sharedData[i] * 2.0f;
+    }
+
+    // Synchronize again before writing back to global memory
+    __syncthreads();
+
+    // Write results back to global memory with coalesced access
+    for (int i = tid; i < N; i += stride) {
+        output[i] = sharedData[i];
+    }
+}
