@@ -1,0 +1,67 @@
+#include 
+#include 
+
+#define N 1024  // Size of the dataset
+#define NUM_STREAMS 4  // Number of CUDA streams
+
+__global__ void processData(float* data, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size) {
+        // Perform some computation on the data
+        data[idx] = data[idx] * 2.0f;
+    }
+}
+
+int main() {
+    float h_data[N];  // Host data
+    float *d_data;    // Device data
+    cudaStream_t streams[NUM_STREAMS];
+
+    // Initialize host data
+    for (int i = 0; i < N; i++) {
+        h_data[i] = static_cast(i);
+    }
+
+    // Allocate device memory
+    cudaMalloc((void**)&d_data, N * sizeof(float));
+
+    // Create CUDA streams
+    for (int i = 0; i < NUM_STREAMS; i++) {
+        cudaStreamCreate(&streams[i]);
+    }
+
+    // Divide the data into chunks and process in parallel using streams
+    int chunkSize = N / NUM_STREAMS;
+    for (int i = 0; i < NUM_STREAMS; i++) {
+        int offset = i * chunkSize;
+        cudaMemcpyAsync(&d_data[offset], &h_data[offset], 
+                        chunkSize * sizeof(float), 
+                        cudaMemcpyHostToDevice, streams[i]);
+        processData<<<(chunkSize + 255) / 256, 256, 0, streams[i]>>>
+                  (&d_data[offset], chunkSize);
+        cudaMemcpyAsync(&h_data[offset], &d_data[offset], 
+                        chunkSize * sizeof(float), 
+                        cudaMemcpyDeviceToHost, streams[i]);
+    }
+
+    // Synchronize streams to ensure all operations are complete
+    for (int i = 0; i < NUM_STREAMS; i++) {
+        cudaStreamSynchronize(streams[i]);
+    }
+
+    // Destroy streams
+    for (int i = 0; i < NUM_STREAMS; i++) {
+        cudaStreamDestroy(streams[i]);
+    }
+
+    // Free device memory
+    cudaFree(d_data);
+
+    // Print processed data
+    for (int i = 0; i < N; i++) {
+        std::cout << h_data[i] << " ";
+    }
+    std::cout << std::endl;
+
+    return 0;
+}
