@@ -1,0 +1,24 @@
+__global__ void smInternalsKernel(float *input, float *output, int N) {
+    // Shared memory declaration for intra-SM communication
+    __shared__ float sharedMem[1024];
+
+    // Calculate thread ID and total threads
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    int totalThreads = blockDim.x * gridDim.x;
+
+    // Cooperative loading into shared memory
+    if (tid < N) {
+        sharedMem[threadIdx.x] = input[tid];
+    }
+    __syncthreads();
+
+    // Perform computation using shared memory
+    if (tid < N) {
+        float value = sharedMem[threadIdx.x];
+        // Example computation: simple arithmetic operation
+        output[tid] = value * 2.0f + 1.0f;
+    }
+
+    // Ensure all threads complete before proceeding
+    __syncthreads();
+}
