@@ -1,0 +1,42 @@
+// CUDA kernel for pipeline optimization in real-time processing
+__global__ void pipelineOptimizationKernel(float* input, float* output, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        // Stage 1: Data loading and preprocessing
+        float data = input[idx];
+        data = data * 2.0f; // Example preprocessing step
+
+        // Stage 2: Intermediate computation
+        float intermediate = sinf(data); // Example computation
+
+        // Stage 3: Post-processing and output
+        output[idx] = intermediate + 1.0f; // Example post-processing
+    }
+}
+
+// Host function to manage pipeline optimization
+void launchPipelineOptimization(float* h_input, float* h_output, int N) {
+    float *d_input, *d_output;
+    size_t size = N * sizeof(float);
+
+    // Allocate device memory
+    cudaMalloc(&d_input, size);
+    cudaMalloc(&d_output, size);
+
+    // Copy input data to device
+    cudaMemcpy(d_input, h_input, size, cudaMemcpyHostToDevice);
+
+    // Define block and grid dimensions
+    int threadsPerBlock = 256;
+    int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
+
+    // Launch the kernel with pipeline optimization
+    pipelineOptimizationKernel<<>>(d_input, d_output, N);
+
+    // Copy result back to host
+    cudaMemcpy(h_output, d_output, size, cudaMemcpyDeviceToHost);
+
+    // Free device memory
+    cudaFree(d_input);
+    cudaFree(d_output);
+}
