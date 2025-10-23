@@ -1,0 +1,23 @@
+__global__ void insertKernel(int* keys, int* values, int* table, int size) {
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    if (idx < size) {
+        int key = keys[idx];
+        int value = values[idx];
+        int hash = key % TABLE_SIZE; // Simple hash function
+        while (atomicCAS(&table[hash], EMPTY, value) != EMPTY) {
+            hash = (hash + 1) % TABLE_SIZE; // Linear probing
+        }
+    }
+}
+
+__global__ void lookupKernel(int* keys, int* results, int* table, int size) {
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    if (idx < size) {
+        int key = keys[idx];
+        int hash = key % TABLE_SIZE; // Simple hash function
+        while (table[hash] != EMPTY && table[hash] != key) {
+            hash = (hash + 1) % TABLE_SIZE; // Linear probing
+        }
+        results[idx] = (table[hash] == key) ? table[hash] : -1; // Return value or -1 if not found
+    }
+}
