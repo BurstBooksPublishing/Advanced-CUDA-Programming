@@ -1,0 +1,68 @@
+// CUDA C++ code for efficient traversal of sparse data using Compressed Sparse Row (CSR) format
+#include 
+#include 
+
+// Kernel to perform sparse matrix-vector multiplication (SpMV) using CSR format
+__global__ void spmv_csr_kernel(int num_rows, const int *row_ptr, const int *col_idx, 
+                                const float *values, const float *x, float *y) {
+    int row = blockIdx.x * blockDim.x + threadIdx.x;
+    if (row < num_rows) {
+        float dot_product = 0.0f;
+        int row_start = row_ptr[row];
+        int row_end = row_ptr[row + 1];
+        for (int j = row_start; j < row_end; j++) {
+            dot_product += values[j] * x[col_idx[j]];
+        }
+        y[row] = dot_product;
+    }
+}
+
+int main() {
+    // Example sparse matrix in CSR format
+    int num_rows = 4;
+    int num_cols = 4;
+    int num_nonzeros = 6;
+    int row_ptr[] = {0, 2, 3, 5, 6}; // Row pointers
+    int col_idx[] = {0, 1, 1, 2, 3, 0}; // Column indices
+    float values[] = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f}; // Non-zero values
+    float x[] = {1.0f, 2.0f, 3.0f, 4.0f}; // Input vector
+    float y[num_rows] = {0.0f}; // Output vector
+
+    // Allocate device memory
+    int *d_row_ptr, *d_col_idx;
+    float *d_values, *d_x, *d_y;
+    cudaMalloc(&d_row_ptr, (num_rows + 1) * sizeof(int));
+    cudaMalloc(&d_col_idx, num_nonzeros * sizeof(int));
+    cudaMalloc(&d_values, num_nonzeros * sizeof(float));
+    cudaMalloc(&d_x, num_cols * sizeof(float));
+    cudaMalloc(&d_y, num_rows * sizeof(float));
+
+    // Copy data to device
+    cudaMemcpy(d_row_ptr, row_ptr, (num_rows + 1) * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_col_idx, col_idx, num_nonzeros * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_values, values, num_nonzeros * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_x, x, num_cols * sizeof(float), cudaMemcpyHostToDevice);
+
+    // Launch kernel
+    int threads_per_block = 256;
+    int blocks_per_grid = (num_rows + threads_per_block - 1) / threads_per_block;
+    spmv_csr_kernel<<>>(num_rows, d_row_ptr, d_col_idx, 
+                                                           d_values, d_x, d_y);
+
+    // Copy result back to host
+    cudaMemcpy(y, d_y, num_rows * sizeof(float), cudaMemcpyDeviceToHost);
+
+    // Print result
+    for (int i = 0; i < num_rows; i++) {
+        std::cout << "y[" << i << "] = " << y[i] << std::endl;
+    }
+
+    // Free device memory
+    cudaFree(d_row_ptr);
+    cudaFree(d_col_idx);
+    cudaFree(d_values);
+    cudaFree(d_x);
+    cudaFree(d_y);
+
+    return 0;
+}
