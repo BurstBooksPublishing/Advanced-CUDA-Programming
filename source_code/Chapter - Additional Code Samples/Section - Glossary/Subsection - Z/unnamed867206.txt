@@ -1,0 +1,55 @@
+#include 
+#include 
+#include 
+
+// Kernel for batch processing inference
+__global__ void batchInferenceKernel(float* input, float* output, int batchSize, int inputSize) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < batchSize * inputSize) {
+        int batchIdx = idx / inputSize;
+        int elementIdx = idx % inputSize;
+        // Example inference computation (e.g., simple ReLU)
+        output[idx] = fmaxf(0.0f, input[idx]);
+    }
+}
+
+void batchInference(float* h_input, float* h_output, int batchSize, int inputSize) {
+    float *d_input, *d_output;
+    size_t size = batchSize * inputSize * sizeof(float);
+
+    // Allocate device memory
+    cudaMalloc(&d_input, size);
+    cudaMalloc(&d_output, size);
+
+    // Copy input data to device
+    cudaMemcpy(d_input, h_input, size, cudaMemcpyHostToDevice);
+
+    // Launch kernel with appropriate grid and block sizes
+    int threadsPerBlock = 256;
+    int blocksPerGrid = (batchSize * inputSize + threadsPerBlock - 1) / threadsPerBlock;
+    batchInferenceKernel<<>>(d_input, d_output, batchSize, inputSize);
+
+    // Copy result back to host
+    cudaMemcpy(h_output, d_output, size, cudaMemcpyDeviceToHost);
+
+    // Free device memory
+    cudaFree(d_input);
+    cudaFree(d_output);
+}
+
+int main() {
+    int batchSize = 1024;
+    int inputSize = 128;
+    std::vector h_input(batchSize * inputSize, 1.0f); // Example input
+    std::vector h_output(batchSize * inputSize);
+
+    // Perform batch inference
+    batchInference(h_input.data(), h_output.data(), batchSize, inputSize);
+
+    // Print first few results for verification
+    for (int i = 0; i < 10; ++i) {
+        std::cout << "Output[" << i << "] = " << h_output[i] << std::endl;
+    }
+
+    return 0;
+}
