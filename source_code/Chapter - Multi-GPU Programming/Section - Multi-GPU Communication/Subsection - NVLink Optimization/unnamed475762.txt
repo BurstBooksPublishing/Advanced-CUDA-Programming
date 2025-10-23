@@ -1,0 +1,49 @@
+// NVLink Optimization Example
+__global__ void kernel(float *A, float *B, float *C, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        C[idx] = A[idx] + B[idx]; // Perform element-wise addition
+    }
+}
+
+void multiGPU_NVLink_optimization(float *h_A, float *h_B, float *h_C, int N) {
+    int numDevices;
+    cudaGetDeviceCount(&numDevices); // Get the number of available GPUs
+
+    // Allocate memory and copy data to each GPU
+    float *d_A[numDevices], *d_B[numDevices], *d_C[numDevices];
+    for (int dev = 0; dev < numDevices; dev++) {
+        cudaSetDevice(dev);
+        cudaMalloc(&d_A[dev], N * sizeof(float));
+        cudaMalloc(&d_B[dev], N * sizeof(float));
+        cudaMalloc(&d_C[dev], N * sizeof(float));
+        cudaMemcpy(d_A[dev], h_A, N * sizeof(float), cudaMemcpyHostToDevice);
+        cudaMemcpy(d_B[dev], h_B, N * sizeof(float), cudaMemcpyHostToDevice);
+    }
+
+    // Launch kernel on each GPU
+    for (int dev = 0; dev < numDevices; dev++) {
+        cudaSetDevice(dev);
+        kernel<<<(N + 255) / 256, 256>>>(d_A[dev], d_B[dev], d_C[dev], N);
+    }
+
+    // Synchronize all GPUs
+    for (int dev = 0; dev < numDevices; dev++) {
+        cudaSetDevice(dev);
+        cudaDeviceSynchronize();
+    }
+
+    // Copy results back to host
+    for (int dev = 0; dev < numDevices; dev++) {
+        cudaSetDevice(dev);
+        cudaMemcpy(h_C, d_C[dev], N * sizeof(float), cudaMemcpyDeviceToHost);
+    }
+
+    // Free device memory
+    for (int dev = 0; dev < numDevices; dev++) {
+        cudaSetDevice(dev);
+        cudaFree(d_A[dev]);
+        cudaFree(d_B[dev]);
+        cudaFree(d_C[dev]);
+    }
+}
