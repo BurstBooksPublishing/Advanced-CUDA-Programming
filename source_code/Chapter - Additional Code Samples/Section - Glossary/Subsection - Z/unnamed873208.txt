@@ -1,0 +1,58 @@
+// CUDA C++ implementation of remote memory access techniques for multi-GPU setups
+#include 
+#include 
+
+#define CHECK(call) \
+{ \
+    const cudaError_t error = call; \
+    if (error != cudaSuccess) { \
+        std::cerr << "Error: " << __FILE__ << ":" << __LINE__ << ", " \
+                  << cudaGetErrorString(error) << std::endl; \
+        exit(1); \
+    } \
+}
+
+__global__ void kernel(int *d_data, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        d_data[idx] += 1; // Increment each element by 1
+    }
+}
+
+int main() {
+    int N = 1 << 20; // Size of the array
+    size_t size = N * sizeof(int);
+
+    // Allocate memory on GPU 0
+    int *d_data0;
+    CHECK(cudaSetDevice(0));
+    CHECK(cudaMalloc(&d_data0, size));
+
+    // Allocate memory on GPU 1
+    int *d_data1;
+    CHECK(cudaSetDevice(1));
+    CHECK(cudaMalloc(&d_data1, size));
+
+    // Initialize data on GPU 0
+    CHECK(cudaSetDevice(0));
+    kernel<<<(N + 255) / 256, 256>>>(d_data0, N);
+
+    // Copy data from GPU 0 to GPU 1 using peer-to-peer access
+    CHECK(cudaDeviceEnablePeerAccess(1, 0)); // Enable peer access from GPU 0 to GPU 1
+    CHECK(cudaMemcpyPeer(d_data1, 1, d_data0, 0, size));
+
+    // Process data on GPU 1
+    CHECK(cudaSetDevice(1));
+    kernel<<<(N + 255) / 256, 256>>>(d_data1, N);
+
+    // Copy data back from GPU 1 to GPU 0
+    CHECK(cudaMemcpyPeer(d_data0, 0, d_data1, 1, size));
+
+    // Free memory
+    CHECK(cudaSetDevice(0));
+    CHECK(cudaFree(d_data0));
+    CHECK(cudaSetDevice(1));
+    CHECK(cudaFree(d_data1));
+
+    return 0;
+}
