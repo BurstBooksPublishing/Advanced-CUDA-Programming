@@ -1,0 +1,45 @@
+// CUDA kernel for batch processing in inference optimization
+__global__ void batchInferenceKernel(float* input, float* output, 
+                                      int batchSize, int inputSize) {
+    // Calculate the global thread index
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    // Ensure the thread index is within the batch size
+    if (idx < batchSize) {
+        // Perform inference for each element in the batch
+        for (int i = 0; i < inputSize; ++i) {
+            // Example operation: apply a simple transformation
+            output[idx * inputSize + i] = input[idx * inputSize + i] * 2.0f;
+        }
+    }
+}
+
+// Host function to launch the batch inference kernel
+void launchBatchInference(float* h_input, float* h_output, 
+                          int batchSize, int inputSize) {
+    float *d_input, *d_output;
+    
+    // Allocate device memory
+    cudaMalloc(&d_input, batchSize * inputSize * sizeof(float));
+    cudaMalloc(&d_output, batchSize * inputSize * sizeof(float));
+    
+    // Copy input data to device
+    cudaMemcpy(d_input, h_input, batchSize * inputSize * sizeof(float), 
+               cudaMemcpyHostToDevice);
+    
+    // Define block and grid dimensions
+    int threadsPerBlock = 256;
+    int blocksPerGrid = (batchSize + threadsPerBlock - 1) / threadsPerBlock;
+    
+    // Launch the kernel
+    batchInferenceKernel<<>>(d_input, d_output, 
+                                                             batchSize, inputSize);
+    
+    // Copy the result back to host
+    cudaMemcpy(h_output, d_output, batchSize * inputSize * sizeof(float), 
+               cudaMemcpyDeviceToHost);
+    
+    // Free device memory
+    cudaFree(d_input);
+    cudaFree(d_output);
+}
