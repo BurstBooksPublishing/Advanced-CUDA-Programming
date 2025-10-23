@@ -1,0 +1,54 @@
+// CUDA C++ code for defragmentation in GPU memory management
+
+#include 
+#include 
+#include 
+
+// Kernel to copy data from fragmented memory to a contiguous block
+__global__ void defragmentKernel(int* dst, int* src, int* indices, int n) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        dst[idx] = src[indices[idx]]; // Copy data to contiguous memory
+    }
+}
+
+// Function to perform defragmentation
+void defragmentMemory(int* d_fragmented, int* d_contiguous, int* d_indices, int n) {
+    int blockSize = 256;
+    int numBlocks = (n + blockSize - 1) / blockSize;
+    defragmentKernel<<>>(d_contiguous, d_fragmented, d_indices, n);
+    cudaDeviceSynchronize(); // Ensure kernel execution is complete
+}
+
+int main() {
+    const int n = 1024; // Number of elements
+    std::vector h_fragmented(n), h_contiguous(n), h_indices(n);
+
+    // Initialize fragmented memory and indices
+    for (int i = 0; i < n; ++i) {
+        h_fragmented[i] = i; // Example data
+        h_indices[i] = (i + 123) % n; // Example indices for defragmentation
+    }
+
+    int *d_fragmented, *d_contiguous, *d_indices;
+    cudaMalloc(&d_fragmented, n * sizeof(int));
+    cudaMalloc(&d_contiguous, n * sizeof(int));
+    cudaMalloc(&d_indices, n * sizeof(int));
+
+    // Copy data to device
+    cudaMemcpy(d_fragmented, h_fragmented.data(), n * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_indices, h_indices.data(), n * sizeof(int), cudaMemcpyHostToDevice);
+
+    // Perform defragmentation
+    defragmentMemory(d_fragmented, d_contiguous, d_indices, n);
+
+    // Copy defragmented data back to host
+    cudaMemcpy(h_contiguous.data(), d_contiguous, n * sizeof(int), cudaMemcpyDeviceToHost);
+
+    // Free device memory
+    cudaFree(d_fragmented);
+    cudaFree(d_contiguous);
+    cudaFree(d_indices);
+
+    return 0;
+}
