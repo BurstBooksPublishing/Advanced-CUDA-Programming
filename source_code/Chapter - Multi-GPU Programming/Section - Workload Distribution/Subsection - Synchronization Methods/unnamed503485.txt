@@ -1,0 +1,30 @@
+// CUDA kernel to demonstrate synchronization methods in multi-GPU programming
+__global__ void multiGPUSyncKernel(float* data, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        // Perform some computation
+        data[idx] = data[idx] * 2.0f;
+    }
+    // Synchronize threads within the block
+    __syncthreads();
+}
+
+void distributeWorkload(float* h_data, int N, int numGPUs) {
+    int chunkSize = N / numGPUs;
+    for (int i = 0; i < numGPUs; ++i) {
+        cudaSetDevice(i);
+        float* d_data;
+        cudaMalloc(&d_data, chunkSize * sizeof(float));
+        cudaMemcpy(d_data, h_data + i * chunkSize, chunkSize * sizeof(float), cudaMemcpyHostToDevice);
+        
+        // Launch kernel on the current GPU
+        multiGPUSyncKernel<<<(chunkSize + 255) / 256, 256>>>(d_data, chunkSize);
+        
+        // Synchronize the device to ensure kernel completion
+        cudaDeviceSynchronize();
+        
+        // Copy data back to host
+        cudaMemcpy(h_data + i * chunkSize, d_data, chunkSize * sizeof(float), cudaMemcpyDeviceToHost);
+        cudaFree(d_data);
+    }
+}
