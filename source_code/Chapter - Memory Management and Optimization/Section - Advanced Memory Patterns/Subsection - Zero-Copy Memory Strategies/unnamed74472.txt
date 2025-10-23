@@ -1,0 +1,46 @@
+// Zero-Copy Memory Example in CUDA
+#include 
+#include 
+
+__global__ void kernel(int *data, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        data[idx] = data[idx] * 2; // Perform computation on zero-copy memory
+    }
+}
+
+int main() {
+    int N = 1024;
+    int *h_data, *d_data;
+    size_t size = N * sizeof(int);
+
+    // Allocate host memory as pinned (zero-copy)
+    cudaHostAlloc(&h_data, size, cudaHostAllocMapped);
+
+    // Initialize host data
+    for (int i = 0; i < N; i++) {
+        h_data[i] = i;
+    }
+
+    // Get device pointer from host pointer
+    cudaHostGetDevicePointer(&d_data, h_data, 0);
+
+    // Launch kernel with zero-copy memory
+    kernel<<<(N + 255) / 256, 256>>>(d_data, N);
+
+    // Synchronize to ensure kernel completion
+    cudaDeviceSynchronize();
+
+    // Verify results
+    for (int i = 0; i < N; i++) {
+        if (h_data[i] != i * 2) {
+            printf("Error at index %d: %d\n", i, h_data[i]);
+            break;
+        }
+    }
+
+    // Free zero-copy memory
+    cudaFreeHost(h_data);
+
+    return 0;
+}
