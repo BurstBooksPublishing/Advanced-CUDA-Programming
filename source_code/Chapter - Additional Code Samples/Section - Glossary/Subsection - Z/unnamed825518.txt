@@ -1,0 +1,54 @@
+#include 
+#include 
+#include 
+#include 
+
+// Kernel to compute non-zero elements in a sparse matrix
+__global__ void countNonZeros(const int* data, int* nonZeroCount, int n) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        nonZeroCount[idx] = (data[idx] != 0) ? 1 : 0;
+    }
+}
+
+// Kernel to compact non-zero elements into a sparse structure
+__global__ void compactSparse(const int* data, const int* scanResult, int* sparseData, int n) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n && data[idx] != 0) {
+        sparseData[scanResult[idx]] = data[idx];
+    }
+}
+
+int main() {
+    const int n = 10;
+    int h_data[n] = {0, 5, 0, 0, 3, 0, 0, 8, 0, 1};
+    thrust::device_vector d_data(h_data, h_data + n);
+    thrust::device_vector d_nonZeroCount(n);
+    thrust::device_vector d_scanResult(n);
+    thrust::device_vector d_sparseData(n);
+
+    // Count non-zero elements
+    countNonZeros<<<(n + 255) / 256, 256>>>(thrust::raw_pointer_cast(d_data.data()),
+                                            thrust::raw_pointer_cast(d_nonZeroCount.data()), n);
+
+    // Perform exclusive scan to determine positions in the sparse structure
+    thrust::exclusive_scan(d_nonZeroCount.begin(), d_nonZeroCount.end(), d_scanResult.begin());
+
+    // Compact non-zero elements into the sparse structure
+    compactSparse<<<(n + 255) / 256, 256>>>(thrust::raw_pointer_cast(d_data.data()),
+                                            thrust::raw_pointer_cast(d_scanResult.data()),
+                                            thrust::raw_pointer_cast(d_sparseData.data()), n);
+
+    // Copy result back to host
+    thrust::host_vector h_sparseData = d_sparseData;
+
+    // Print the sparse data
+    for (int i = 0; i < n; ++i) {
+        if (h_sparseData[i] != 0) {
+            std::cout << h_sparseData[i] << " ";
+        }
+    }
+    std::cout << std::endl;
+
+    return 0;
+}
