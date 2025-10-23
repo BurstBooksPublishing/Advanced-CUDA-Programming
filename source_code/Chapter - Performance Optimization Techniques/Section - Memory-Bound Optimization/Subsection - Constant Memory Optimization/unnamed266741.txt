@@ -1,0 +1,27 @@
+__constant__ float constData[1024]; // Allocate constant memory
+
+__global__ void kernel(float* output) {
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    output[idx] = constData[idx % 1024]; // Access constant memory
+}
+
+int main() {
+    float h_data[1024], *d_output;
+    cudaMalloc((void**)&d_output, 1024 * sizeof(float));
+
+    // Initialize host data
+    for (int i = 0; i < 1024; i++) h_data[i] = i;
+
+    // Copy data to constant memory
+    cudaMemcpyToSymbol(constData, h_data, 1024 * sizeof(float));
+
+    // Launch kernel
+    kernel<<<4, 256>>>(d_output);
+
+    // Copy result back to host
+    float h_output[1024];
+    cudaMemcpy(h_output, d_output, 1024 * sizeof(float), cudaMemcpyDeviceToHost);
+
+    cudaFree(d_output);
+    return 0;
+}
