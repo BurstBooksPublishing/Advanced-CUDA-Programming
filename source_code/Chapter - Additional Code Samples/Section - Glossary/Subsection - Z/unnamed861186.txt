@@ -1,0 +1,74 @@
+#include 
+#include 
+#include 
+#include 
+
+#define CHECK(call) \
+{ \
+    const cudaError_t error = call; \
+    if (error != cudaSuccess) { \
+        std::cerr << "Error: " << __FILE__ << ":" << __LINE__ << ", " \
+                  << cudaGetErrorString(error) << std::endl; \
+        exit(1); \
+    } \
+}
+
+#define CHECK_NCCL(call) \
+{ \
+    ncclResult_t res = call; \
+    if (res != ncclSuccess) { \
+        std::cerr << "NCCL error: " << ncclGetErrorString(res) << std::endl; \
+        exit(1); \
+    } \
+}
+
+__global__ void gradient_update(float* gradients, float* model, int n, float lr) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        model[idx] -= lr * gradients[idx]; // Update model parameters
+    }
+}
+
+int main(int argc, char** argv) {
+    int size, rank;
+    MPI_Init(&argc, &argv);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    cudaSetDevice(rank); // Assign each MPI rank to a different GPU
+
+    ncclUniqueId id;
+    if (rank == 0) ncclGetUniqueId(&id);
+    MPI_Bcast(&id, sizeof(id), MPI_BYTE, 0, MPI_COMM_WORLD);
+
+    ncclComm_t comm;
+    CHECK_NCCL(ncclCommInitRank(&comm, size, id, rank));
+
+    const int N = 1 << 20; // Number of parameters
+    float *h_gradients, *d_gradients, *d_model;
+    h_gradients = (float*)malloc(N * sizeof(float));
+    CHECK(cudaMalloc(&d_gradients, N * sizeof(float)));
+    CHECK(cudaMalloc(&d_model, N * sizeof(float)));
+
+    // Initialize gradients and model on each GPU
+    for (int i = 0; i < N; i++) {
+        h_gradients[i] = 1.0f; // Example gradient
+    }
+    CHECK(cudaMemcpy(d_gradients, h_gradients, N * sizeof(float), cudaMemcpyHostToDevice));
+    CHECK(cudaMemset(d_model, 0, N * sizeof(float))); // Initialize model to zero
+
+    // All-reduce gradients across GPUs
+    CHECK_NCCL(ncclAllReduce(d_gradients, d_gradients, N, ncclFloat, ncclSum, comm, 0));
+
+    // Update model parameters using the averaged gradients
+    gradient_update<<<(N + 255) / 256, 256>>>(d_gradients, d_model, N, 0.01f);
+
+    // Cleanup
+    CHECK(cudaFree(d_gradients));
+    CHECK(cudaFree(d_model));
+    free(h_gradients);
+    ncclCommDestroy(comm);
+    MPI_Finalize();
+
+    return 0;
+}
