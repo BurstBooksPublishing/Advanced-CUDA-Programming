@@ -1,0 +1,84 @@
+#include 
+#include 
+#include 
+
+// Define a simple memory pool structure
+struct MemoryPool {
+    void* pool;          // Pointer to the memory pool
+    size_t poolSize;     // Total size of the memory pool
+    size_t usedSize;     // Amount of memory used
+};
+
+// Function to initialize the memory pool
+__host__ void initializeMemoryPool(MemoryPool& pool, size_t size) {
+    cudaMalloc(&pool.pool, size);  // Allocate memory on the device
+    pool.poolSize = size;
+    pool.usedSize = 0;
+}
+
+// Function to allocate memory from the pool
+__host__ void* allocateFromPool(MemoryPool& pool, size_t size) {
+    if (pool.usedSize + size > pool.poolSize) {
+        std::cerr << "Memory pool exhausted!" << std::endl;
+        return nullptr;
+    }
+    void* ptr = static_cast(pool.pool) + pool.usedSize;
+    pool.usedSize += size;
+    return ptr;
+}
+
+// Function to reset the memory pool
+__host__ void resetMemoryPool(MemoryPool& pool) {
+    pool.usedSize = 0;
+}
+
+// Function to free the memory pool
+__host__ void freeMemoryPool(MemoryPool& pool) {
+    cudaFree(pool.pool);
+    pool.pool = nullptr;
+    pool.poolSize = 0;
+    pool.usedSize = 0;
+}
+
+// Example kernel that uses the memory pool
+__global__ void kernel(int* data, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        data[idx] = idx * idx;  // Simple computation
+    }
+}
+
+int main() {
+    const size_t poolSize = 1024 * 1024;  // 1 MB memory pool
+    MemoryPool pool;
+    initializeMemoryPool(pool, poolSize);
+
+    int N = 1024;
+    size_t dataSize = N * sizeof(int);
+
+    // Allocate memory for data from the pool
+    int* d_data = static_cast(allocateFromPool(pool, dataSize));
+    if (!d_data) {
+        std::cerr << "Failed to allocate memory from pool!" << std::endl;
+        return -1;
+    }
+
+    // Launch kernel
+    kernel<<<(N + 255) / 256, 256>>>(d_data, N);
+
+    // Copy data back to host
+    std::vector h_data(N);
+    cudaMemcpy(h_data.data(), d_data, dataSize, cudaMemcpyDeviceToHost);
+
+    // Print some results
+    for (int i = 0; i < 10; ++i) {
+        std::cout << h_data[i] << " ";
+    }
+    std::cout << std::endl;
+
+    // Reset and free the memory pool
+    resetMemoryPool(pool);
+    freeMemoryPool(pool);
+
+    return 0;
+}
