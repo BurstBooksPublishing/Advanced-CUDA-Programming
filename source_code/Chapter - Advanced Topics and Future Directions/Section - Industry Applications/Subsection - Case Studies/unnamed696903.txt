@@ -1,0 +1,46 @@
+// CUDA kernel for parallel matrix multiplication
+__global__ void matrixMul(float* C, const float* A, const float* B, int N) {
+    // Calculate row and column index of the element
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Check if the thread is within the matrix bounds
+    if (row < N && col < N) {
+        float value = 0.0f;
+        // Perform dot product of row of A and column of B
+        for (int k = 0; k < N; ++k) {
+            value += A[row * N + k] * B[k * N + col];
+        }
+        // Store the result in matrix C
+        C[row * N + col] = value;
+    }
+}
+
+// Host function to launch the kernel
+void launchMatrixMul(float* h_C, const float* h_A, const float* h_B, int N) {
+    // Allocate device memory
+    float *d_A, *d_B, *d_C;
+    cudaMalloc(&d_A, N * N * sizeof(float));
+    cudaMalloc(&d_B, N * N * sizeof(float));
+    cudaMalloc(&d_C, N * N * sizeof(float));
+
+    // Copy matrices A and B to device
+    cudaMemcpy(d_A, h_A, N * N * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, h_B, N * N * sizeof(float), cudaMemcpyHostToDevice);
+
+    // Define block and grid dimensions
+    dim3 threadsPerBlock(16, 16);
+    dim3 blocksPerGrid((N + threadsPerBlock.x - 1) / threadsPerBlock.x,
+                        (N + threadsPerBlock.y - 1) / threadsPerBlock.y);
+
+    // Launch the kernel
+    matrixMul<<>>(d_C, d_A, d_B, N);
+
+    // Copy result matrix C back to host
+    cudaMemcpy(h_C, d_C, N * N * sizeof(float), cudaMemcpyDeviceToHost);
+
+    // Free device memory
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_C);
+}
