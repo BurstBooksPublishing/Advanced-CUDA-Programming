@@ -1,0 +1,9 @@
+__global__ void optimizedKernel(float* A, float* B, float* C, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        // Use PTX inline assembly for optimized multiplication
+        asm volatile("mul.f32 %0, %1, %2;" : "=f"(C[idx]) : "f"(A[idx]), "f"(B[idx]));
+        // Use PTX inline assembly for optimized addition
+        asm volatile("add.f32 %0, %0, %1;" : "+f"(C[idx]) : "f"(B[idx]));
+    }
+}
