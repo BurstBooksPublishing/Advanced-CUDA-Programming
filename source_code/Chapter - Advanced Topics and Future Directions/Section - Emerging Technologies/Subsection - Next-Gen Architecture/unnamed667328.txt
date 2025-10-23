@@ -1,0 +1,26 @@
+// CUDA kernel for Next-Gen Architecture
+__global__ void nextGenKernel(float* input, float* output, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        // Advanced computation leveraging Next-Gen Architecture
+        float value = input[idx];
+        value = __sinf(value) + __cosf(value); // Example computation
+        output[idx] = value * 2.0f; // Scaling the result
+    }
+}
+
+// Host function to launch the kernel
+void launchNextGenKernel(float* h_input, float* h_output, int N) {
+    float *d_input, *d_output;
+    cudaMalloc(&d_input, N * sizeof(float));
+    cudaMalloc(&d_output, N * sizeof(float));
+    cudaMemcpy(d_input, h_input, N * sizeof(float), cudaMemcpyHostToDevice);
+
+    int blockSize = 256;
+    int numBlocks = (N + blockSize - 1) / blockSize;
+    nextGenKernel<<>>(d_input, d_output, N);
+
+    cudaMemcpy(h_output, d_output, N * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaFree(d_input);
+    cudaFree(d_output);
+}
