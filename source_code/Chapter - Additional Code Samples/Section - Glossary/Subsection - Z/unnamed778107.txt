@@ -1,0 +1,55 @@
+#include 
+#include 
+
+#define N 1024 * 1024
+
+__global__ void kernel(int *d_data) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        d_data[idx] = d_data[idx] * 2; // Simple computation
+    }
+}
+
+int main() {
+    int *h_data, *d_data;
+    cudaStream_t stream;
+
+    // Allocate host and device memory
+    h_data = (int *)malloc(N * sizeof(int));
+    cudaMalloc(&d_data, N * sizeof(int));
+
+    // Initialize host data
+    for (int i = 0; i < N; i++) {
+        h_data[i] = i;
+    }
+
+    // Create a CUDA stream
+    cudaStreamCreate(&stream);
+
+    // Asynchronously copy data to device
+    cudaMemcpyAsync(d_data, h_data, N * sizeof(int), cudaMemcpyHostToDevice, stream);
+
+    // Launch kernel in the same stream
+    kernel<<<(N + 255) / 256, 256, 0, stream>>>(d_data);
+
+    // Asynchronously prefetch data back to host
+    cudaMemPrefetchAsync(h_data, N * sizeof(int), cudaCpuDeviceId, stream);
+
+    // Synchronize the stream to ensure completion
+    cudaStreamSynchronize(stream);
+
+    // Verify the result
+    for (int i = 0; i < N; i++) {
+        if (h_data[i] != i * 2) {
+            std::cerr << "Error at index " << i << std::endl;
+            break;
+        }
+    }
+
+    // Cleanup
+    cudaFree(d_data);
+    free(h_data);
+    cudaStreamDestroy(stream);
+
+    return 0;
+}
