@@ -1,0 +1,87 @@
+#include 
+#include 
+#include 
+
+// Memory pool block structure
+struct MemoryBlock {
+    void* ptr;
+    size_t size;
+    bool isFree;
+};
+
+// Memory pool class
+class MemoryPool {
+public:
+    MemoryPool(size_t poolSize) : poolSize(poolSize) {
+        // Allocate initial pool of memory on the GPU
+        cudaMalloc(&poolMemory, poolSize);
+        blocks.push_back({poolMemory, poolSize, true});
+    }
+
+    ~MemoryPool() {
+        // Free the entire pool memory
+        cudaFree(poolMemory);
+    }
+
+    // Allocate memory from the pool
+    void* allocate(size_t size) {
+        for (auto& block : blocks) {
+            if (block.isFree && block.size >= size) {
+                block.isFree = false;
+                return block.ptr;
+            }
+        }
+        // If no suitable block is found, return nullptr
+        return nullptr;
+    }
+
+    // Free memory back to the pool
+    void deallocate(void* ptr) {
+        for (auto& block : blocks) {
+            if (block.ptr == ptr) {
+                block.isFree = true;
+                break;
+            }
+        }
+    }
+
+private:
+    void* poolMemory;
+    size_t poolSize;
+    std::vector blocks;
+};
+
+int main() {
+    // Create a memory pool with 1MB of GPU memory
+    MemoryPool pool(1024 * 1024);
+
+    // Allocate 256KB from the pool
+    void* ptr1 = pool.allocate(256 * 1024);
+    if (ptr1) {
+        std::cout << "Allocated 256KB at " << ptr1 << std::endl;
+    } else {
+        std::cout << "Failed to allocate 256KB" << std::endl;
+    }
+
+    // Allocate another 512KB from the pool
+    void* ptr2 = pool.allocate(512 * 1024);
+    if (ptr2) {
+        std::cout << "Allocated 512KB at " << ptr2 << std::endl;
+    } else {
+        std::cout << "Failed to allocate 512KB" << std::endl;
+    }
+
+    // Free the first allocation
+    pool.deallocate(ptr1);
+    std::cout << "Freed 256KB at " << ptr1 << std::endl;
+
+    // Allocate 768KB (should reuse the freed 256KB block)
+    void* ptr3 = pool.allocate(768 * 1024);
+    if (ptr3) {
+        std::cout << "Allocated 768KB at " << ptr3 << std::endl;
+    } else {
+        std::cout << "Failed to allocate 768KB" << std::endl;
+    }
+
+    return 0;
+}
