@@ -1,0 +1,71 @@
+#include 
+#include 
+
+#define N 1024  // Number of elements in the array
+#define BLOCK_SIZE 256  // Threads per block
+
+__global__ void vectorAdd(int *A, int *B, int *C) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        C[idx] = A[idx] + B[idx];
+    }
+}
+
+int main() {
+    int *h_A, *h_B, *h_C;  // Host pointers
+    int *d_A, *d_B, *d_C;  // Device pointers
+
+    // Allocate memory on the host
+    h_A = (int *)malloc(N * sizeof(int));
+    h_B = (int *)malloc(N * sizeof(int));
+    h_C = (int *)malloc(N * sizeof(int));
+
+    // Initialize host arrays
+    for (int i = 0; i < N; i++) {
+        h_A[i] = i;
+        h_B[i] = i * 2;
+    }
+
+    // Allocate memory on the device
+    cudaMalloc((void **)&d_A, N * sizeof(int));
+    cudaMalloc((void **)&d_B, N * sizeof(int));
+    cudaMalloc((void **)&d_C, N * sizeof(int));
+
+    // Copy data from host to device
+    cudaMemcpy(d_A, h_A, N * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, h_B, N * sizeof(int), cudaMemcpyHostToDevice);
+
+    // Launch the kernel with optimized block size
+    int numBlocks = (N + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    vectorAdd<<>>(d_A, d_B, d_C);
+
+    // Copy the result back to the host
+    cudaMemcpy(h_C, d_C, N * sizeof(int), cudaMemcpyDeviceToHost);
+
+    // Verify the result
+    bool success = true;
+    for (int i = 0; i < N; i++) {
+        if (h_C[i] != h_A[i] + h_B[i]) {
+            success = false;
+            break;
+        }
+    }
+
+    if (success) {
+        std::cout << "Vector addition successful!" << std::endl;
+    } else {
+        std::cout << "Vector addition failed!" << std::endl;
+    }
+
+    // Free device memory
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_C);
+
+    // Free host memory
+    free(h_A);
+    free(h_B);
+    free(h_C);
+
+    return 0;
+}
