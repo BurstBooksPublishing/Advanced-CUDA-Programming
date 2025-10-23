@@ -1,0 +1,47 @@
+// CUDA C++ implementation of a lock-free stack for concurrent operations
+#include 
+#include 
+
+__device__ struct Node {
+    int data;
+    Node* next;
+};
+
+__device__ Node* head = nullptr;
+
+__device__ void push(int value) {
+    Node* newNode = new Node();
+    newNode->data = value;
+    do {
+        newNode->next = head;
+    } while (atomicCAS((unsigned long long*)&head, 
+                       (unsigned long long)newNode->next, 
+                       (unsigned long long)newNode) != (unsigned long long)newNode->next);
+}
+
+__device__ int pop() {
+    Node* oldHead;
+    do {
+        oldHead = head;
+        if (oldHead == nullptr) return -1; // Stack is empty
+    } while (atomicCAS((unsigned long long*)&head, 
+                       (unsigned long long)oldHead, 
+                       (unsigned long long)oldHead->next) != (unsigned long long)oldHead);
+    int value = oldHead->data;
+    delete oldHead;
+    return value;
+}
+
+__global__ void testStack() {
+    push(10);
+    push(20);
+    int val1 = pop();
+    int val2 = pop();
+    printf("Popped values: %d, %d\n", val1, val2);
+}
+
+int main() {
+    testStack<<<1, 1>>>();
+    cudaDeviceSynchronize();
+    return 0;
+}
