@@ -1,0 +1,14 @@
+__global__ void optimizedKernel(float* A, float* B, float* C, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        // Use fused multiply-add (FMA) for improved precision and performance
+        C[idx] = __fmaf_rn(A[idx], B[idx], C[idx]);
+        
+        // Minimize divergent branches by using predicated instructions
+        float temp = (A[idx] > 0.0f) ? A[idx] : B[idx];
+        
+        // Use PTX assembly for fine-grained control over specific operations
+        asm volatile("add.f32 %0, %1, %2;" : "=f"(C[idx]) : "f"(C[idx]), "f"(temp));
+    }
+}
+\ed{lstlisting}
