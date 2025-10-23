@@ -1,0 +1,26 @@
+#include 
+#include 
+#include 
+
+int main() {
+    // Initialize host vector with unsorted data
+    std::vector h_data = {5, 3, 1, 4, 2};
+
+    // Copy data to device vector
+    thrust::device_vector d_data = h_data;
+
+    // Perform parallel sort using Thrust
+    thrust::sort(d_data.begin(), d_data.end());
+
+    // Copy sorted data back to host
+    thrust::copy(d_data.begin(), d_data.end(), h_data.begin());
+
+    // Print sorted data
+    std::cout << "Sorted data: ";
+    for (int i = 0; i < h_data.size(); i++) {
+        std::cout << h_data[i] << " ";
+    }
+    std::cout << std::endl;
+
+    return 0;
+}
