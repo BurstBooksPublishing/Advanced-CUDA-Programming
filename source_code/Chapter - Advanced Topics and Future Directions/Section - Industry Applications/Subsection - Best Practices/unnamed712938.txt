@@ -1,0 +1,40 @@
+// Advanced CUDA Code Sample: Optimized Matrix Multiplication
+__global__ void matrixMul(float* C, const float* A, const float* B, int N) {
+    // Shared memory for tiles of A and B
+    __shared__ float sharedA[16][16];
+    __shared__ float sharedB[16][16];
+
+    // Calculate row and column index of the element
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    float value = 0.0f;
+
+    // Loop over tiles of the input matrices
+    for (int t = 0; t < (N + 15) / 16; ++t) {
+        // Load elements into shared memory
+        if (row < N && t * 16 + threadIdx.x < N)
+            sharedA[threadIdx.y][threadIdx.x] = A[row * N + t * 16 + threadIdx.x];
+        else
+            sharedA[threadIdx.y][threadIdx.x] = 0.0f;
+
+        if (col < N && t * 16 + threadIdx.y < N)
+            sharedB[threadIdx.y][threadIdx.x] = B[(t * 16 + threadIdx.y) * N + col];
+        else
+            sharedB[threadIdx.y][threadIdx.x] = 0.0f;
+
+        // Synchronize to ensure all threads have loaded their data
+        __syncthreads();
+
+        // Compute partial product for the tile
+        for (int k = 0; k < 16; ++k)
+            value += sharedA[threadIdx.y][k] * sharedB[k][threadIdx.x];
+
+        // Synchronize to ensure all threads have finished computation
+        __syncthreads();
+    }
+
+    // Write the result to the output matrix
+    if (row < N && col < N)
+        C[row * N + col] = value;
+}
