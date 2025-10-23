@@ -1,0 +1,69 @@
+#include 
+#include 
+#include 
+
+// Custom memory allocator for device memory
+class DeviceMemoryAllocator {
+public:
+    // Constructor
+    DeviceMemoryAllocator(size_t poolSize) : poolSize(poolSize) {
+        cudaMalloc(&devicePool, poolSize); // Allocate a pool of device memory
+        if (!devicePool) {
+            std::cerr << "Failed to allocate device memory pool!" << std::endl;
+            exit(EXIT_FAILURE);
+        }
+        freeList.push_back({devicePool, poolSize}); // Initialize free list
+    }
+
+    // Destructor
+    ~DeviceMemoryAllocator() {
+        cudaFree(devicePool); // Free the entire memory pool
+    }
+
+    // Allocate memory from the pool
+    void* allocate(size_t size) {
+        for (auto it = freeList.begin(); it != freeList.end(); ++it) {
+            if (it->size >= size) {
+                void* ptr = it->ptr;
+                it->ptr = static_cast(it->ptr) + size;
+                it->size -= size;
+                if (it->size == 0) {
+                    freeList.erase(it); // Remove block if fully allocated
+                }
+                return ptr;
+            }
+        }
+        std::cerr << "Out of memory in device pool!" << std::endl;
+        return nullptr;
+    }
+
+    // Free memory back to the pool
+    void deallocate(void* ptr, size_t size) {
+        freeList.push_back({ptr, size}); // Add block back to free list
+    }
+
+private:
+    struct MemoryBlock {
+        void* ptr;
+        size_t size;
+    };
+
+    void* devicePool; // Pointer to the device memory pool
+    size_t poolSize;  // Total size of the memory pool
+    std::vector freeList; // List of free memory blocks
+};
+
+// Example usage
+int main() {
+    DeviceMemoryAllocator allocator(1024 * 1024); // 1 MB pool
+
+    void* d_data1 = allocator.allocate(256); // Allocate 256 bytes
+    void* d_data2 = allocator.allocate(512); // Allocate 512 bytes
+
+    // Use the allocated memory (e.g., kernel launches)
+
+    allocator.deallocate(d_data1, 256); // Free 256 bytes
+    allocator.deallocate(d_data2, 512); // Free 512 bytes
+
+    return 0;
+}
