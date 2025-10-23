@@ -1,0 +1,41 @@
+#include 
+#include 
+#include 
+
+#define N 1000000  // Number of samples
+#define BLOCK_SIZE 256
+
+// Kernel to generate random numbers and compute Monte Carlo integration
+__global__ void monte_carlo(float *results, int n) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        curandState state;
+        curand_init(clock64(), idx, 0, &state);  // Initialize random number generator
+        float x = curand_uniform(&state);       // Generate random number between 0 and 1
+        float y = curand_uniform(&state);       // Generate random number between 0 and 1
+        results[idx] = (x * x + y * y <= 1.0f) ? 1.0f : 0.0f;  // Check if point is inside unit circle
+    }
+}
+
+int main() {
+    float *d_results, *h_results;
+    h_results = (float *)malloc(N * sizeof(float));
+    cudaMalloc((void **)&d_results, N * sizeof(float));
+
+    int num_blocks = (N + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    monte_carlo<<>>(d_results, N);
+
+    cudaMemcpy(h_results, d_results, N * sizeof(float), cudaMemcpyDeviceToHost);
+
+    float sum = 0.0f;
+    for (int i = 0; i < N; i++) {
+        sum += h_results[i];
+    }
+    float pi_estimate = 4.0f * sum / N;  // Estimate Pi using Monte Carlo method
+    std::cout << "Estimated Pi: " << pi_estimate << std::endl;
+
+    cudaFree(d_results);
+    free(h_results);
+
+    return 0;
+}
