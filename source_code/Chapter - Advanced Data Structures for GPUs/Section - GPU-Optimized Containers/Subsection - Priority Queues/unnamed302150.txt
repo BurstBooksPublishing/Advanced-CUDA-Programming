@@ -1,0 +1,45 @@
+// CUDA kernel for priority queue insertion
+__global__ void insertPriorityQueue(int *queue, int *size, int value) {
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    if (idx < *size) {
+        // Insert value into the queue
+        queue[idx] = value;
+        // Heapify up to maintain priority order
+        while (idx > 0 && queue[(idx - 1) / 2] > queue[idx]) {
+            int temp = queue[idx];
+            queue[idx] = queue[(idx - 1) / 2];
+            queue[(idx - 1) / 2] = temp;
+            idx = (idx - 1) / 2;
+        }
+    }
+}
+
+// CUDA kernel for priority queue extraction
+__global__ void extractPriorityQueue(int *queue, int *size, int *result) {
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    if (idx == 0 && *size > 0) {
+        // Extract the root (minimum value)
+        *result = queue[0];
+        // Replace root with the last element
+        queue[0] = queue[*size - 1];
+        (*size)--;
+        // Heapify down to maintain priority order
+        int i = 0;
+        while (true) {
+            int left = 2 * i + 1;
+            int right = 2 * i + 2;
+            int smallest = i;
+            if (left < *size && queue[left] < queue[smallest]) {
+                smallest = left;
+            }
+            if (right < *size && queue[right] < queue[smallest]) {
+                smallest = right;
+            }
+            if (smallest == i) break;
+            int temp = queue[i];
+            queue[i] = queue[smallest];
+            queue[smallest] = temp;
+            i = smallest;
+        }
+    }
+}
