@@ -1,0 +1,56 @@
+#include 
+#include 
+
+#define N 1024
+
+// Function to check for CUDA errors
+#define CHECK(call) \
+{ \
+    const cudaError_t error = call; \
+    if (error != cudaSuccess) \
+    { \
+        std::cerr << "Error: " << __FILE__ << ":" << __LINE__ << ", " \
+                  << cudaGetErrorString(error) << std::endl; \
+        exit(1); \
+    } \
+}
+
+int main() {
+    int *h_data, *d_data;
+    size_t size = N * sizeof(int);
+
+    // Allocate host memory with zero-copy (pinned) memory
+    CHECK(cudaHostAlloc((void**)&h_data, size, cudaHostAllocMapped));
+
+    // Initialize host data
+    for (int i = 0; i < N; i++) {
+        h_data[i] = i;
+    }
+
+    // Get device pointer from host pointer
+    CHECK(cudaHostGetDevicePointer((void**)&d_data, h_data, 0));
+
+    // Launch kernel to modify data on the device
+    kernel<<<1, N>>>(d_data);
+    CHECK(cudaDeviceSynchronize());
+
+    // Verify the result on the host
+    for (int i = 0; i < N; i++) {
+        if (h_data[i] != i + 1) {
+            std::cerr << "Error at index " << i << ": " << h_data[i] << std::endl;
+            break;
+        }
+    }
+
+    // Free zero-copy memory
+    CHECK(cudaFreeHost(h_data));
+
+    std::cout << "Zero-copy memory test passed!" << std::endl;
+    return 0;
+}
+
+// Simple kernel to increment each element by 1
+__global__ void kernel(int *data) {
+    int idx = threadIdx.x;
+    data[idx] += 1;
+}
