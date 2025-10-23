@@ -1,0 +1,59 @@
+// CUDA program demonstrating pinned memory usage with asynchronous memory operations
+#include <cuda_runtime.h>
+#include <iostream>
+
+#define N 1024
+
+__global__ void kernel(int *d_data) {
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    if (idx < N) {
+        d_data[idx] *= 2; // Perform a simple operation on the data
+    }
+}
+
+int main() {
+    int *h_data, *d_data;
+    size_t size = N * sizeof(int);
+
+    // Allocate pinned host memory
+    cudaMallocHost((void**)&h_data, size);
+
+    // Initialize host data
+    for (int i = 0; i < N; i++) {
+        h_data[i] = i;
+    }
+
+    // Allocate device memory
+    cudaMalloc((void**)&d_data, size);
+
+    // Create a CUDA stream
+    cudaStream_t stream;
+    cudaStreamCreate(&stream);
+
+    // Asynchronously copy data from host to device
+    cudaMemcpyAsync(d_data, h_data, size, cudaMemcpyHostToDevice, stream);
+
+    // Launch kernel in the same stream
+    kernel<<<(N + 255) / 256, 256, 0, stream>>>(d_data);
+
+    // Asynchronously copy data from device to host
+    cudaMemcpyAsync(h_data, d_data, size, cudaMemcpyDeviceToHost, stream);
+
+    // Synchronize the stream to ensure all operations are complete
+    cudaStreamSynchronize(stream);
+
+    // Verify the result
+    for (int i = 0; i < N; i++) {
+        if (h_data[i] != i * 2) {
+            std::cerr << "Error at index " << i << std::endl;
+            break;
+        }
+    }
+
+    // Cleanup
+    cudaFree(d_data);
+    cudaFreeHost(h_data);
+    cudaStreamDestroy(stream);
+
+    return 0;
+}
