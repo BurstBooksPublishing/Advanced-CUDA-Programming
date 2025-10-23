@@ -1,0 +1,47 @@
+// CUDA kernel for stream processing in a data pipeline
+__global__ void processStream(float* input, float* output, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size) {
+        // Perform real-time processing on each element
+        output[idx] = input[idx] * 2.0f; // Example transformation
+    }
+}
+
+// Function to manage the data pipeline using CUDA streams
+void dataPipeline(float* h_input, float* h_output, int size) {
+    float *d_input, *d_output;
+    cudaStream_t stream1, stream2;
+
+    // Allocate device memory
+    cudaMalloc((void**)&d_input, size * sizeof(float));
+    cudaMalloc((void**)&d_output, size * sizeof(float));
+
+    // Create CUDA streams
+    cudaStreamCreate(&stream1);
+    cudaStreamCreate(&stream2);
+
+    // Copy input data to device in two streams
+    cudaMemcpyAsync(d_input, h_input, size/2 * sizeof(float), 
+                    cudaMemcpyHostToDevice, stream1);
+    cudaMemcpyAsync(d_input + size/2, h_input + size/2, 
+                    size/2 * sizeof(float), cudaMemcpyHostToDevice, stream2);
+
+    // Launch kernels in respective streams
+    processStream<<<(size/2 + 255)/256, 256, 0, stream1>>>(d_input, d_output, size/2);
+    processStream<<<(size/2 + 255)/256, 256, 0, stream2>>>(d_input + size/2, 
+                                                           d_output + size/2, size/2);
+
+    // Copy results back to host in two streams
+    cudaMemcpyAsync(h_output, d_output, size/2 * sizeof(float), 
+                    cudaMemcpyDeviceToHost, stream1);
+    cudaMemcpyAsync(h_output + size/2, d_output + size/2, 
+                    size/2 * sizeof(float), cudaMemcpyDeviceToHost, stream2);
+
+    // Synchronize streams and free resources
+    cudaStreamSynchronize(stream1);
+    cudaStreamSynchronize(stream2);
+    cudaFree(d_input);
+    cudaFree(d_output);
+    cudaStreamDestroy(stream1);
+    cudaStreamDestroy(stream2);
+}
