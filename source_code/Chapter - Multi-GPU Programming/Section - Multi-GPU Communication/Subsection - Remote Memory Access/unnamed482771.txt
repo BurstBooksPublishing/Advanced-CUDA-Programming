@@ -1,0 +1,34 @@
+// CUDA kernel for remote memory access across GPUs
+__global__ void remoteMemoryAccess(float* local_data, float* remote_data, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size) {
+        // Access remote memory and perform computation
+        local_data[idx] += remote_data[idx]; // Add remote data to local data
+    }
+}
+
+// Host function to manage multi-GPU communication
+void multiGPURemoteAccess(float* local_data, float* remote_data, int size, int device_id) {
+    cudaSetDevice(device_id); // Set the current device
+    float *d_local_data, *d_remote_data;
+
+    // Allocate device memory for local and remote data
+    cudaMalloc(&d_local_data, size * sizeof(float));
+    cudaMalloc(&d_remote_data, size * sizeof(float));
+
+    // Copy local and remote data to device
+    cudaMemcpy(d_local_data, local_data, size * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_remote_data, remote_data, size * sizeof(float), cudaMemcpyHostToDevice);
+
+    // Launch kernel to perform remote memory access
+    int threadsPerBlock = 256;
+    int blocksPerGrid = (size + threadsPerBlock - 1) / threadsPerBlock;
+    remoteMemoryAccess<<>>(d_local_data, d_remote_data, size);
+
+    // Copy result back to host
+    cudaMemcpy(local_data, d_local_data, size * sizeof(float), cudaMemcpyDeviceToHost);
+
+    // Free device memory
+    cudaFree(d_local_data);
+    cudaFree(d_remote_data);
+}
