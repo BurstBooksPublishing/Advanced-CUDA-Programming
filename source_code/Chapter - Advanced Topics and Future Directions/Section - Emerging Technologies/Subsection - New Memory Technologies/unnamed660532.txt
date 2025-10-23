@@ -1,0 +1,28 @@
+// CUDA kernel to demonstrate memory access using new memory technologies
+__global__ void newMemoryTechKernel(float* input, float* output, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        // Example of using new memory technology for faster access
+        float value = __ldg(&input[idx]);  // Use __ldg for read-only access
+        output[idx] = value * 2.0f;        // Perform computation
+    }
+}
+
+// Host function to launch the kernel
+void launchNewMemoryTechKernel(float* h_input, float* h_output, int N) {
+    float *d_input, *d_output;
+    cudaMalloc(&d_input, N * sizeof(float));  // Allocate device memory
+    cudaMalloc(&d_output, N * sizeof(float));
+
+    cudaMemcpy(d_input, h_input, N * sizeof(float), cudaMemcpyHostToDevice);
+
+    int blockSize = 256;
+    int numBlocks = (N + blockSize - 1) / blockSize;
+
+    newMemoryTechKernel<<>>(d_input, d_output, N);
+
+    cudaMemcpy(h_output, d_output, N * sizeof(float), cudaMemcpyDeviceToHost);
+
+    cudaFree(d_input);  // Free device memory
+    cudaFree(d_output);
+}
