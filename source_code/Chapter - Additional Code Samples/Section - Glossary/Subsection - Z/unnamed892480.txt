@@ -1,0 +1,50 @@
+#include 
+#include 
+#include 
+
+// Kernel function with potential memory errors
+__global__ void memoryErrorKernel(int *d_array, int N) {
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    if (idx < N) {
+        d_array[idx] = d_array[idx] + 1;  // Potential out-of-bounds access
+    }
+}
+
+int main() {
+    int N = 1024;
+    int *h_array = (int *)malloc(N * sizeof(int));
+    int *d_array;
+    
+    // Allocate device memory
+    cudaMalloc((void**)&d_array, N * sizeof(int));
+    
+    // Initialize host array
+    for (int i = 0; i < N; i++) {
+        h_array[i] = i;
+    }
+    
+    // Copy host array to device
+    cudaMemcpy(d_array, h_array, N * sizeof(int), cudaMemcpyHostToDevice);
+    
+    // Launch kernel with potential memory errors
+    memoryErrorKernel<<<1, N>>>(d_array, N);
+    
+    // Check for CUDA errors after kernel launch
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        printf("CUDA error: %s\n", cudaGetErrorString(err));
+    }
+    
+    // Synchronize to ensure kernel completion
+    cudaDeviceSynchronize();
+    
+    // Check for memory errors using cuda-memcheck tools
+    // This is typically done outside the code using tools like cuda-memcheck
+    // or by enabling memory checking in CUDA debuggers.
+    
+    // Free device memory
+    cudaFree(d_array);
+    free(h_array);
+    
+    return 0;
+}
