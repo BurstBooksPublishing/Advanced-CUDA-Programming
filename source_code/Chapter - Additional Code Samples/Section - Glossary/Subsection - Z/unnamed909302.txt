@@ -1,0 +1,66 @@
+#include 
+#include 
+#include 
+#include 
+
+// Kernel function to simulate real-time processing
+__global__ void realTimeKernel(int *data, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        // Simulate a real-time task by performing a simple computation
+        data[idx] = data[idx] * 2;
+    }
+}
+
+// Function to manage GPU resources and meet real-time constraints
+void manageGPUResources(int *h_data, int N) {
+    int *d_data;
+    size_t size = N * sizeof(int);
+
+    // Allocate memory on the GPU
+    cudaMalloc((void**)&d_data, size);
+
+    // Copy data from host to device
+    cudaMemcpy(d_data, h_data, size, cudaMemcpyHostToDevice);
+
+    // Define block and grid sizes
+    int blockSize = 256;
+    int gridSize = (N + blockSize - 1) / blockSize;
+
+    // Launch the kernel with real-time constraints
+    auto start = std::chrono::high_resolution_clock::now();
+    realTimeKernel<<>>(d_data, N);
+    cudaDeviceSynchronize(); // Ensure kernel execution is complete
+    auto end = std::chrono::high_resolution_clock::now();
+
+    // Calculate the elapsed time
+    std::chrono::duration elapsed = end - start;
+    std::cout << "Kernel execution time: " << elapsed.count() << " seconds" << std::endl;
+
+    // Copy data back to host
+    cudaMemcpy(h_data, d_data, size, cudaMemcpyDeviceToHost);
+
+    // Free GPU memory
+    cudaFree(d_data);
+}
+
+int main() {
+    const int N = 1000000;
+    int h_data[N];
+
+    // Initialize data
+    for (int i = 0; i < N; i++) {
+        h_data[i] = i;
+    }
+
+    // Manage GPU resources with real-time constraints
+    manageGPUResources(h_data, N);
+
+    // Verify the result
+    for (int i = 0; i < 10; i++) {
+        std::cout << h_data[i] << " ";
+    }
+    std::cout << std::endl;
+
+    return 0;
+}
