@@ -1,0 +1,44 @@
+#include 
+#include 
+
+#define N 1024
+
+__global__ void kernelA(float *data) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        data[idx] = data[idx] * 2.0f; // Perform some computation
+    }
+}
+
+__global__ void kernelB(float *data) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        data[idx] = data[idx] + 1.0f; // Perform some computation
+    }
+}
+
+int main() {
+    float *d_data;
+    cudaMalloc(&d_data, N * sizeof(float));
+
+    cudaStream_t stream1, stream2;
+    cudaStreamCreate(&stream1);
+    cudaStreamCreate(&stream2);
+
+    // Launch kernelA in stream1
+    kernelA<<<(N + 255) / 256, 256, 0, stream1>>>(d_data);
+
+    // Launch kernelB in stream2, dependent on stream1
+    cudaStreamWaitEvent(stream2, cudaEventRecord(stream1), 0);
+    kernelB<<<(N + 255) / 256, 256, 0, stream2>>>(d_data);
+
+    // Synchronize streams
+    cudaStreamSynchronize(stream1);
+    cudaStreamSynchronize(stream2);
+
+    cudaFree(d_data);
+    cudaStreamDestroy(stream1);
+    cudaStreamDestroy(stream2);
+
+    return 0;
+}
