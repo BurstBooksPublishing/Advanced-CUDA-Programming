@@ -1,0 +1,46 @@
+// CUDA C++ implementation of Gradient Descent for numerical optimization
+__global__ void gradientDescentKernel(float* x, const float* gradient, float learningRate, int n) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        // Update x using the gradient and learning rate
+        x[idx] -= learningRate * gradient[idx];
+    }
+}
+
+// CUDA C++ implementation of Conjugate Gradient for solving linear systems
+__global__ void conjugateGradientKernel(float* x, const float* A, const float* b, float* r, float* p, float* Ap, int n) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        // Compute residual r = b - A * x
+        r[idx] = b[idx];
+        for (int j = 0; j < n; ++j) {
+            r[idx] -= A[idx * n + j] * x[j];
+        }
+        // Initialize p = r
+        p[idx] = r[idx];
+    }
+}
+
+// CUDA C++ implementation of Newton's Method for root finding
+__global__ void newtonMethodKernel(float* x, const float* f, const float* df, int n) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        // Update x using Newton's method: x = x - f(x) / f'(x)
+        x[idx] -= f[idx] / df[idx];
+    }
+}
+
+// CUDA C++ implementation of Simulated Annealing for global optimization
+__global__ void simulatedAnnealingKernel(float* x, float* energy, float temperature, int n) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        // Randomly perturb x and accept new state based on energy and temperature
+        float delta = (float)rand() / RAND_MAX - 0.5f;
+        float newX = x[idx] + delta;
+        float newEnergy = computeEnergy(newX); // Assume computeEnergy is defined
+        if (newEnergy < energy[idx] || exp((energy[idx] - newEnergy) / temperature) > (float)rand() / RAND_MAX) {
+            x[idx] = newX;
+            energy[idx] = newEnergy;
+        }
+    }
+}
