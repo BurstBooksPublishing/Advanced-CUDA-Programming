@@ -1,0 +1,87 @@
+#include 
+#include 
+#include 
+
+// Function to check CUDA errors
+#define CHECK_CUDA(func) \
+{ \
+    cudaError_t err = (func); \
+    if (err != cudaSuccess) { \
+        std::cerr << "CUDA Error: " << cudaGetErrorString(err) << " at " \
+                  << __FILE__ << ":" << __LINE__ << std::endl; \
+        exit(EXIT_FAILURE); \
+    } \
+}
+
+// Function to check cuSOLVER errors
+#define CHECK_CUSOLVER(func) \
+{ \
+    cusolverStatus_t err = (func); \
+    if (err != CUSOLVER_STATUS_SUCCESS) { \
+        std::cerr << "cuSOLVER Error: " << err << " at " \
+                  << __FILE__ << ":" << __LINE__ << std::endl; \
+        exit(EXIT_FAILURE); \
+    } \
+}
+
+int main() {
+    // Matrix dimensions
+    const int n = 3;
+    const int lda = n;
+
+    // Host matrix and eigenvalues
+    double A[n * n] = {4.0, 1.0, 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 3.0};
+    double eigenvalues[n];
+
+    // Device matrix and workspace
+    double *d_A;
+    double *d_eigenvalues;
+    int *d_info;
+    int lwork = 0;
+    double *d_work = nullptr;
+
+    // Allocate device memory
+    CHECK_CUDA(cudaMalloc((void**)&d_A, n * n * sizeof(double)));
+    CHECK_CUDA(cudaMalloc((void**)&d_eigenvalues, n * sizeof(double)));
+    CHECK_CUDA(cudaMalloc((void**)&d_info, sizeof(int)));
+
+    // Copy matrix to device
+    CHECK_CUDA(cudaMemcpy(d_A, A, n * n * sizeof(double), cudaMemcpyHostToDevice));
+
+    // Create cuSOLVER handle
+    cusolverDnHandle_t handle;
+    CHECK_CUSOLVER(cusolverDnCreate(&handle));
+
+    // Query workspace size
+    CHECK_CUSOLVER(cusolverDnDsyevd_bufferSize(handle, CUSOLVER_EIG_MODE_VECTOR, 
+                                               CUBLAS_FILL_MODE_LOWER, n, d_A, 
+                                               lda, d_eigenvalues, &lwork));
+
+    // Allocate workspace
+    CHECK_CUDA(cudaMalloc((void**)&d_work, lwork * sizeof(double)));
+
+    // Compute eigenvalues
+    CHECK_CUSOLVER(cusolverDnDsyevd(handle, CUSOLVER_EIG_MODE_VECTOR, 
+                                    CUBLAS_FILL_MODE_LOWER, n, d_A, lda, 
+                                    d_eigenvalues, d_work, lwork, d_info));
+
+    // Copy eigenvalues back to host
+    CHECK_CUDA(cudaMemcpy(eigenvalues, d_eigenvalues, n * sizeof(double), 
+                          cudaMemcpyDeviceToHost));
+
+    // Print eigenvalues
+    std::cout << "Eigenvalues: ";
+    for (int i = 0; i < n; ++i) {
+        std::cout << eigenvalues[i] << " ";
+    }
+    std::cout << std::endl;
+
+    // Cleanup
+    CHECK_CUDA(cudaFree(d_A));
+    CHECK_CUDA(cudaFree(d_eigenvalues));
+    CHECK_CUDA(cudaFree(d_info));
+    CHECK_CUDA(cudaFree(d_work));
+    CHECK_CUSOLVER(cusolverDnDestroy(handle));
+
+    return 0;
+}
