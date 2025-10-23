@@ -1,0 +1,54 @@
+// CUDA kernel for graph traversal using BFS
+__global__ void bfs_kernel(int *adjacency_list, int *level, int *visited, int num_nodes, int current_level) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < num_nodes && level[idx] == current_level) {
+        for (int i = adjacency_list[idx]; i < adjacency_list[idx + 1]; ++i) {
+            int neighbor = adjacency_list[i];
+            if (!visited[neighbor]) {
+                visited[neighbor] = 1;
+                level[neighbor] = current_level + 1;
+            }
+        }
+    }
+}
+
+// Host function to manage BFS traversal
+void bfs(int *adjacency_list, int *level, int *visited, int num_nodes) {
+    int current_level = 0;
+    level[0] = 0; // Start from node 0
+    visited[0] = 1;
+
+    while (true) {
+        int *d_adjacency_list, *d_level, *d_visited;
+        cudaMalloc(&d_adjacency_list, (num_nodes + 1) * sizeof(int));
+        cudaMalloc(&d_level, num_nodes * sizeof(int));
+        cudaMalloc(&d_visited, num_nodes * sizeof(int));
+
+        cudaMemcpy(d_adjacency_list, adjacency_list, (num_nodes + 1) * sizeof(int), cudaMemcpyHostToDevice);
+        cudaMemcpy(d_level, level, num_nodes * sizeof(int), cudaMemcpyHostToDevice);
+        cudaMemcpy(d_visited, visited, num_nodes * sizeof(int), cudaMemcpyHostToDevice);
+
+        int threads_per_block = 256;
+        int blocks_per_grid = (num_nodes + threads_per_block - 1) / threads_per_block;
+
+        bfs_kernel<<>>(d_adjacency_list, d_level, d_visited, num_nodes, current_level);
+
+        cudaMemcpy(level, d_level, num_nodes * sizeof(int), cudaMemcpyDeviceToHost);
+        cudaMemcpy(visited, d_visited, num_nodes * sizeof(int), cudaMemcpyDeviceToHost);
+
+        cudaFree(d_adjacency_list);
+        cudaFree(d_level);
+        cudaFree(d_visited);
+
+        int next_level_exists = 0;
+        for (int i = 0; i < num_nodes; ++i) {
+            if (level[i] == current_level + 1) {
+                next_level_exists = 1;
+                break;
+            }
+        }
+
+        if (!next_level_exists) break;
+        current_level++;
+    }
+}
