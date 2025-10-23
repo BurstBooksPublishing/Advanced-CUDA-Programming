@@ -1,0 +1,71 @@
+#include 
+#include 
+#include 
+
+#define CHECK(call) \
+{ \
+    const cudaError_t error = call; \
+    if (error != cudaSuccess) { \
+        std::cerr << "Error: " << __FILE__ << ":" << __LINE__ << ", " \
+                  << cudaGetErrorString(error) << std::endl; \
+        exit(1); \
+    } \
+}
+
+__global__ void kernel(float* data, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        data[idx] = data[idx] * 2.0f; // Simple computation
+    }
+}
+
+int main() {
+    int N = 1 << 20; // 1M elements
+    size_t size = N * sizeof(float);
+
+    // Allocate memory on two GPUs
+    float *d_A0, *d_A1;
+    CHECK(cudaSetDevice(0));
+    CHECK(cudaMalloc(&d_A0, size));
+    CHECK(cudaSetDevice(1));
+    CHECK(cudaMalloc(&d_A1, size));
+
+    // Initialize data on GPU 0
+    CHECK(cudaSetDevice(0));
+    std::vector h_A(N, 1.0f); // Initialize host data
+    CHECK(cudaMemcpy(d_A0, h_A.data(), size, cudaMemcpyHostToDevice));
+
+    // Enable peer access between GPUs for NVLink optimization
+    CHECK(cudaSetDevice(0));
+    CHECK(cudaDeviceEnablePeerAccess(1, 0));
+    CHECK(cudaSetDevice(1));
+    CHECK(cudaDeviceEnablePeerAccess(0, 0));
+
+    // Copy data from GPU 0 to GPU 1 using NVLink
+    CHECK(cudaMemcpyPeer(d_A1, 1, d_A0, 0, size));
+
+    // Launch kernel on GPU 1
+    CHECK(cudaSetDevice(1));
+    kernel<<<(N + 255) / 256, 256>>>(d_A1, N);
+
+    // Copy result back to GPU 0
+    CHECK(cudaMemcpyPeer(d_A0, 0, d_A1, 1, size));
+
+    // Verify result on GPU 0
+    CHECK(cudaSetDevice(0));
+    CHECK(cudaMemcpy(h_A.data(), d_A0, size, cudaMemcpyDeviceToHost));
+    for (int i = 0; i < N; ++i) {
+        if (h_A[i] != 2.0f) {
+            std::cerr << "Verification failed at index " << i << std::endl;
+            exit(1);
+        }
+    }
+
+    std::cout << "Verification successful!" << std::endl;
+
+    // Cleanup
+    CHECK(cudaFree(d_A0));
+    CHECK(cudaFree(d_A1));
+
+    return 0;
+}
