@@ -1,0 +1,50 @@
+// CUDA kernel with dynamic block sizing
+__global__ void dynamicBlockKernel(float* data, int N) {
+    // Calculate global thread index
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Ensure the thread index is within bounds
+    if (idx < N) {
+        // Perform computation (e.g., square the value)
+        data[idx] = data[idx] * data[idx];
+    }
+}
+
+int main() {
+    int N = 1 << 20; // Size of the data array
+    size_t size = N * sizeof(float);
+
+    // Allocate host and device memory
+    float* h_data = (float*)malloc(size);
+    float* d_data;
+    cudaMalloc(&d_data, size);
+
+    // Initialize host data
+    for (int i = 0; i < N; i++) {
+        h_data[i] = static_cast(i);
+    }
+
+    // Copy data to device
+    cudaMemcpy(d_data, h_data, size, cudaMemcpyHostToDevice);
+
+    // Calculate dynamic block size based on device properties
+    int device;
+    cudaGetDevice(&device);
+    cudaDeviceProp prop;
+    cudaGetDeviceProperties(&prop, device);
+    int maxThreadsPerBlock = prop.maxThreadsPerBlock;
+    int blockSize = maxThreadsPerBlock; // Use maximum threads per block
+    int gridSize = (N + blockSize - 1) / blockSize; // Calculate grid size
+
+    // Launch kernel with dynamic block sizing
+    dynamicBlockKernel<<>>(d_data, N);
+
+    // Copy result back to host
+    cudaMemcpy(h_data, d_data, size, cudaMemcpyDeviceToHost);
+
+    // Free memory
+    free(h_data);
+    cudaFree(d_data);
+
+    return 0;
+}
