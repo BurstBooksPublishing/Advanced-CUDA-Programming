@@ -1,0 +1,23 @@
+// CUDA kernel to demonstrate warp scheduling mechanisms
+__global__ void warpSchedulingDemo(int *data, int *result, int N) {
+    // Calculate thread ID
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Ensure thread ID is within bounds
+    if (tid < N) {
+        // Simulate warp divergence with a conditional
+        if (tid % 2 == 0) {
+            // Even threads perform a simple operation
+            result[tid] = data[tid] * 2;
+        } else {
+            // Odd threads perform a different operation
+            result[tid] = data[tid] + 1;
+        }
+
+        // Synchronize threads within a warp
+        __syncwarp();
+
+        // Further computation to observe warp scheduling
+        result[tid] += result[tid] * 3;
+    }
+}
