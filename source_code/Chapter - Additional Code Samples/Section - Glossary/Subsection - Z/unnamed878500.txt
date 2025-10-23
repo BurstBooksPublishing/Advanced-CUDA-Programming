@@ -1,0 +1,65 @@
+// CUDA C++ implementation of synchronization methods for multi-GPU environments
+
+#include 
+#include 
+
+// Function to synchronize all GPUs in the system
+void synchronizeGPUs(int num_gpus) {
+    for (int i = 0; i < num_gpus; ++i) {
+        cudaSetDevice(i); // Set the current GPU device
+        cudaDeviceSynchronize(); // Synchronize the current GPU
+    }
+}
+
+// Function to distribute workload across multiple GPUs
+void distributeWorkload(float* h_data, int data_size, int num_gpus) {
+    float* d_data[num_gpus];
+    int chunk_size = data_size / num_gpus;
+
+    // Allocate memory and copy data to each GPU
+    for (int i = 0; i < num_gpus; ++i) {
+        cudaSetDevice(i);
+        cudaMalloc(&d_data[i], chunk_size * sizeof(float));
+        cudaMemcpy(d_data[i], h_data + i * chunk_size, 
+                   chunk_size * sizeof(float), cudaMemcpyHostToDevice);
+    }
+
+    // Perform computation on each GPU
+    for (int i = 0; i < num_gpus; ++i) {
+        cudaSetDevice(i);
+        // Launch kernel or perform computation here
+        // Example: kernel<<>>(d_data[i], chunk_size);
+    }
+
+    // Synchronize all GPUs after computation
+    synchronizeGPUs(num_gpus);
+
+    // Copy results back to host and free device memory
+    for (int i = 0; i < num_gpus; ++i) {
+        cudaSetDevice(i);
+        cudaMemcpy(h_data + i * chunk_size, d_data[i], 
+                   chunk_size * sizeof(float), cudaMemcpyDeviceToHost);
+        cudaFree(d_data[i]);
+    }
+}
+
+int main() {
+    int num_gpus;
+    cudaGetDeviceCount(&num_gpus); // Get the number of available GPUs
+
+    int data_size = 1024 * 1024; // Example data size
+    float* h_data = new float[data_size]; // Allocate host memory
+
+    // Initialize host data
+    for (int i = 0; i < data_size; ++i) {
+        h_data[i] = static_cast(i);
+    }
+
+    // Distribute workload across GPUs
+    distributeWorkload(h_data, data_size, num_gpus);
+
+    // Clean up host memory
+    delete[] h_data;
+
+    return 0;
+}
