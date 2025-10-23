@@ -1,0 +1,50 @@
+#include 
+#include 
+#include 
+
+__global__ void mixed_precision_kernel(const half* input, half* output, 
+                                       int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size) {
+        // Convert half to float for computation
+        float val = __half2float(input[idx]);
+        // Perform some computation (e.g., ReLU)
+        val = fmaxf(0.0f, val);
+        // Convert back to half precision
+        output[idx] = __float2half(val);
+    }
+}
+
+void mixed_precision_training(const half* h_input, half* h_output, int size) {
+    half *d_input, *d_output;
+    cudaMalloc(&d_input, size * sizeof(half));
+    cudaMalloc(&d_output, size * sizeof(half));
+
+    cudaMemcpy(d_input, h_input, size * sizeof(half), cudaMemcpyHostToDevice);
+
+    int threads = 256;
+    int blocks = (size + threads - 1) / threads;
+    mixed_precision_kernel<<>>(d_input, d_output, size);
+
+    cudaMemcpy(h_output, d_output, size * sizeof(half), cudaMemcpyDeviceToHost);
+
+    cudaFree(d_input);
+    cudaFree(d_output);
+}
+
+int main() {
+    int size = 1024;
+    half h_input[size], h_output[size];
+    // Initialize input with some values
+    for (int i = 0; i < size; ++i) {
+        h_input[i] = __float2half(static_cast(i) - size / 2);
+    }
+
+    mixed_precision_training(h_input, h_output, size);
+
+    // Output the results
+    for (int i = 0; i < size; ++i) {
+        std::cout << __half2float(h_output[i]) << " ";
+    }
+    return 0;
+}
