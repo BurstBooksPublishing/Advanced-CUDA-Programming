@@ -1,0 +1,29 @@
+// CUDA kernel to demonstrate coalesced memory access
+__global__ void coalescedAccess(float* input, float* output, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        // Coalesced access: consecutive threads access consecutive memory locations
+        output[idx] = input[idx] * 2.0f;
+    }
+}
+
+// CUDA kernel to demonstrate strided memory access
+__global__ void stridedAccess(float* input, float* output, int N, int stride) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        // Strided access: threads access memory locations with a fixed stride
+        output[idx] = input[idx * stride] * 3.0f;
+    }
+}
+
+// CUDA kernel to demonstrate bank conflicts in shared memory
+__global__ void bankConflictExample(float* input, float* output, int N) {
+    __shared__ float sharedMem[32][32];
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        // Potential bank conflict: multiple threads access the same bank
+        sharedMem[threadIdx.x][threadIdx.y] = input[idx];
+        __syncthreads();
+        output[idx] = sharedMem[threadIdx.y][threadIdx.x] * 4.0f;
+    }
+}
