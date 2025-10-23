@@ -1,0 +1,58 @@
+#include 
+#include 
+
+__global__ void cooperativeKernel(int *data, int size) {
+    // Create a cooperative group for the entire thread block
+    cooperative_groups::thread_block block = 
+        cooperative_groups::this_thread_block();
+    
+    // Synchronize all threads in the block
+    block.sync();
+
+    // Perform warp-level operations
+    cooperative_groups::coalesced_group warp = 
+        cooperative_groups::coalesced_threads();
+    
+    // Example: Warp-level reduction
+    int lane_id = warp.thread_rank();
+    int value = data[threadIdx.x + blockIdx.x * blockDim.x];
+    
+    for (int offset = warp.size() / 2; offset > 0; offset /= 2) {
+        value += warp.shfl_down(value, offset);
+    }
+
+    // Store the result in the first thread of the warp
+    if (lane_id == 0) {
+        data[threadIdx.x + blockIdx.x * blockDim.x] = value;
+    }
+}
+
+int main() {
+    int size = 1024;
+    int *h_data = (int *)malloc(size * sizeof(int));
+    int *d_data;
+    cudaMalloc(&d_data, size * sizeof(int));
+
+    // Initialize host data
+    for (int i = 0; i < size; i++) {
+        h_data[i] = 1;
+    }
+
+    // Copy data to device
+    cudaMemcpy(d_data, h_data, size * sizeof(int), cudaMemcpyHostToDevice);
+
+    // Launch kernel with cooperative groups
+    cooperativeKernel<<>>(d_data, size);
+
+    // Copy result back to host
+    cudaMemcpy(h_data, d_data, size * sizeof(int), cudaMemcpyDeviceToHost);
+
+    // Print the result
+    printf("Result: %d\n", h_data[0]);
+
+    // Free memory
+    free(h_data);
+    cudaFree(d_data);
+
+    return 0;
+}
