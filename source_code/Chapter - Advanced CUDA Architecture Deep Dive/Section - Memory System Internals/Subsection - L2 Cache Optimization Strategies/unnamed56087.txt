@@ -1,0 +1,14 @@
+__global__ void l2CacheOptimizedKernel(float* A, float* B, float* C, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        // Prefetch data into L2 cache using __ldg
+        float a = __ldg(&A[idx]);
+        float b = __ldg(&B[idx]);
+        
+        // Perform computation
+        C[idx] = a * b + a + b;
+        
+        // Ensure data is written back to global memory
+        __stcs(&C[idx], C[idx]);
+    }
+}
