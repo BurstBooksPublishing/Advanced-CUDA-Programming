@@ -1,0 +1,48 @@
+#include 
+#include 
+
+#define N 1024 * 1024
+
+__global__ void kernel(int *d_array) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        d_array[idx] = idx;  // Simple operation to fill the array
+    }
+}
+
+int main() {
+    int *h_array, *d_array;
+    cudaStream_t stream;
+    
+    // Allocate pinned host memory
+    cudaMallocHost((void**)&h_array, N * sizeof(int));
+    
+    // Allocate device memory
+    cudaMalloc((void**)&d_array, N * sizeof(int));
+    
+    // Create a CUDA stream
+    cudaStreamCreate(&stream);
+    
+    // Launch kernel asynchronously in the stream
+    kernel<<<(N + 255) / 256, 256, 0, stream>>>(d_array);
+    
+    // Asynchronously copy data from device to host using pinned memory
+    cudaMemcpyAsync(h_array, d_array, N * sizeof(int), 
+                    cudaMemcpyDeviceToHost, stream);
+    
+    // Synchronize the stream to ensure completion
+    cudaStreamSynchronize(stream);
+    
+    // Verify the result
+    for (int i = 0; i < 10; ++i) {
+        std::cout << h_array[i] << " ";
+    }
+    std::cout << std::endl;
+    
+    // Cleanup
+    cudaFreeHost(h_array);
+    cudaFree(d_array);
+    cudaStreamDestroy(stream);
+    
+    return 0;
+}
