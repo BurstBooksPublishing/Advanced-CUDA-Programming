@@ -1,0 +1,65 @@
+// CUDA C++ code showcasing improved memory hierarchy and shared memory utilization in Hopper architecture
+
+__global__ void hopperSharedMemoryOptimization(float* input, float* output, int N) {
+    // Declare shared memory for Hopper architecture
+    __shared__ float sharedMem[1024]; // 1024 floats, 4KB shared memory
+
+    // Calculate thread and block indices
+    int tid = threadIdx.x;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Load data into shared memory
+    if (idx < N) {
+        sharedMem[tid] = input[idx];
+    }
+    __syncthreads(); // Ensure all threads have loaded data into shared memory
+
+    // Perform computation using shared memory
+    if (idx < N) {
+        float value = sharedMem[tid];
+        // Example computation: square the value
+        value = value * value;
+        // Store result back to global memory
+        output[idx] = value;
+    }
+}
+
+int main() {
+    int N = 1 << 20; // 1 million elements
+    size_t size = N * sizeof(float);
+
+    // Allocate host memory
+    float* h_input = (float*)malloc(size);
+    float* h_output = (float*)malloc(size);
+
+    // Initialize input data
+    for (int i = 0; i < N; i++) {
+        h_input[i] = static_cast(i);
+    }
+
+    // Allocate device memory
+    float *d_input, *d_output;
+    cudaMalloc(&d_input, size);
+    cudaMalloc(&d_output, size);
+
+    // Copy data to device
+    cudaMemcpy(d_input, h_input, size, cudaMemcpyHostToDevice);
+
+    // Launch kernel with 1024 threads per block
+    int threadsPerBlock = 1024;
+    int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
+    hopperSharedMemoryOptimization<<>>(d_input, d_output, N);
+
+    // Copy result back to host
+    cudaMemcpy(h_output, d_output, size, cudaMemcpyDeviceToHost);
+
+    // Free device memory
+    cudaFree(d_input);
+    cudaFree(d_output);
+
+    // Free host memory
+    free(h_input);
+    free(h_output);
+
+    return 0;
+}
