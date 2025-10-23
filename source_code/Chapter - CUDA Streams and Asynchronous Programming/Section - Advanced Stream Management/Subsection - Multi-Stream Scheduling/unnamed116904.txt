@@ -1,0 +1,58 @@
+// Multi-Stream Scheduling Example
+#include 
+#include 
+
+#define N 1024
+
+__global__ void kernel(float *data, int offset) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x + offset;
+    if (idx < N) {
+        data[idx] = data[idx] * 2.0f; // Simple computation
+    }
+}
+
+int main() {
+    float *h_data, *d_data;
+    cudaStream_t stream1, stream2;
+
+    // Allocate host and device memory
+    h_data = (float *)malloc(N * sizeof(float));
+    cudaMalloc(&d_data, N * sizeof(float));
+
+    // Initialize host data
+    for (int i = 0; i < N; i++) {
+        h_data[i] = static_cast(i);
+    }
+
+    // Create CUDA streams
+    cudaStreamCreate(&stream1);
+    cudaStreamCreate(&stream2);
+
+    // Copy data to device in two streams
+    cudaMemcpyAsync(d_data, h_data, N/2 * sizeof(float), 
+                    cudaMemcpyHostToDevice, stream1);
+    cudaMemcpyAsync(d_data + N/2, h_data + N/2, N/2 * sizeof(float), 
+                    cudaMemcpyHostToDevice, stream2);
+
+    // Launch kernels in two streams
+    kernel<<>>(d_data, 0);
+    kernel<<>>(d_data, N/2);
+
+    // Copy data back to host in two streams
+    cudaMemcpyAsync(h_data, d_data, N/2 * sizeof(float), 
+                    cudaMemcpyDeviceToHost, stream1);
+    cudaMemcpyAsync(h_data + N/2, d_data + N/2, N/2 * sizeof(float), 
+                    cudaMemcpyDeviceToHost, stream2);
+
+    // Synchronize streams
+    cudaStreamSynchronize(stream1);
+    cudaStreamSynchronize(stream2);
+
+    // Cleanup
+    cudaFree(d_data);
+    free(h_data);
+    cudaStreamDestroy(stream1);
+    cudaStreamDestroy(stream2);
+
+    return 0;
+}
