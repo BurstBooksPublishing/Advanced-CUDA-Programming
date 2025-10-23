@@ -1,0 +1,23 @@
+// CUDA kernel to demonstrate resource utilization and thread block optimization
+__global__ void optimizedKernel(float* A, float* B, float* C, int N) {
+    // Shared memory allocation for thread block cooperation
+    __shared__ float sharedMem[256];
+
+    // Calculate thread index within the block and grid
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Ensure the thread index is within the bounds of the array
+    if (idx < N) {
+        // Load data into shared memory for efficient access
+        sharedMem[threadIdx.x] = A[idx];
+
+        // Synchronize threads to ensure all data is loaded into shared memory
+        __syncthreads();
+
+        // Perform computation using shared memory
+        float result = sharedMem[threadIdx.x] + B[idx];
+
+        // Store the result back to global memory
+        C[idx] = result;
+    }
+}
