@@ -1,0 +1,52 @@
+__device__ int atomicCAS(int* address, int compare, int val) {
+    int old = *address;
+    if (old == compare) {
+        *address = val;
+    }
+    return old;
+}
+
+__global__ void lockFreeStackPush(int* stack, int* top, int value) {
+    int old_top = *top;
+    int new_top = old_top + 1;
+    while (atomicCAS(top, old_top, new_top) != old_top) {
+        old_top = *top;
+        new_top = old_top + 1;
+    }
+    stack[new_top] = value;
+}
+
+__global__ void lockFreeStackPop(int* stack, int* top, int* result) {
+    int old_top = *top;
+    int new_top = old_top - 1;
+    while (atomicCAS(top, old_top, new_top) != old_top) {
+        old_top = *top;
+        new_top = old_top - 1;
+    }
+    *result = stack[old_top];
+}
+
+int main() {
+    const int stack_size = 1024;
+    int* d_stack;
+    int* d_top;
+    int* d_result;
+    int h_result;
+
+    cudaMalloc(&d_stack, stack_size * sizeof(int));
+    cudaMalloc(&d_top, sizeof(int));
+    cudaMalloc(&d_result, sizeof(int));
+
+    cudaMemset(d_top, 0, sizeof(int));
+
+    lockFreeStackPush<<<1, 1>>>(d_stack, d_top, 42);
+    lockFreeStackPop<<<1, 1>>>(d_stack, d_top, d_result);
+
+    cudaMemcpy(&h_result, d_result, sizeof(int), cudaMemcpyDeviceToHost);
+
+    cudaFree(d_stack);
+    cudaFree(d_top);
+    cudaFree(d_result);
+
+    return 0;
+}
