@@ -1,0 +1,43 @@
+#include 
+#include 
+#include 
+#include 
+#include 
+#include 
+#include 
+#include 
+#include 
+#include 
+#include 
+
+// Define a functor to compute priority based on some criteria
+struct priority_functor {
+    __host__ __device__
+    int operator()(const int& x) const {
+        return x % 10; // Example: priority based on last digit
+    }
+};
+
+int main() {
+    // Initialize a device vector with some data
+    thrust::device_vector data(10);
+    thrust::sequence(data.begin(), data.end(), 1); // Fill with 1, 2, ..., 10
+
+    // Create a priority queue using thrust::sort and a custom priority functor
+    thrust::device_vector priorities(data.size());
+    thrust::transform(data.begin(), data.end(), priorities.begin(), priority_functor());
+
+    // Zip the data and priorities together
+    auto zipped = thrust::make_zip_iterator(thrust::make_tuple(data.begin(), priorities.begin()));
+
+    // Sort the zipped data based on priorities
+    thrust::sort_by_key(priorities.begin(), priorities.end(), zipped);
+
+    // Print the sorted data based on priority
+    std::cout << "Sorted Data based on Priority:\n";
+    for (int i = 0; i < data.size(); ++i) {
+        std::cout << "Data: " << data[i] << ", Priority: " << priorities[i] << "\n";
+    }
+
+    return 0;
+}
