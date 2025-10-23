@@ -1,0 +1,57 @@
+// CUDA C++ implementation of dynamic block sizing for optimal GPU resource usage
+
+#include 
+#include 
+
+// Kernel function with dynamic block sizing
+__global__ void dynamicBlockKernel(int *data, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        // Perform computation on data
+        data[idx] = data[idx] * 2;
+    }
+}
+
+int main() {
+    int N = 1 << 20; // Size of the data array
+    size_t size = N * sizeof(int);
+
+    // Allocate host memory
+    int *h_data = (int *)malloc(size);
+
+    // Initialize host data
+    for (int i = 0; i < N; i++) {
+        h_data[i] = i;
+    }
+
+    // Allocate device memory
+    int *d_data;
+    cudaMalloc(&d_data, size);
+
+    // Copy data to device
+    cudaMemcpy(d_data, h_data, size, cudaMemcpyHostToDevice);
+
+    // Calculate optimal block size based on device properties
+    int device;
+    cudaGetDevice(&device);
+    cudaDeviceProp prop;
+    cudaGetDeviceProperties(&prop, device);
+
+    int maxThreadsPerBlock = prop.maxThreadsPerBlock;
+    int threadsPerBlock = maxThreadsPerBlock;
+    int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
+
+    // Launch kernel with dynamic block sizing
+    dynamicBlockKernel<<>>(d_data, N);
+
+    // Copy result back to host
+    cudaMemcpy(h_data, d_data, size, cudaMemcpyDeviceToHost);
+
+    // Free device memory
+    cudaFree(d_data);
+
+    // Free host memory
+    free(h_data);
+
+    return 0;
+}
