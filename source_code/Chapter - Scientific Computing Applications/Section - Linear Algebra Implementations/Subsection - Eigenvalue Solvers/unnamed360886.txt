@@ -1,0 +1,59 @@
+// CUDA kernel to compute eigenvalues using the Power Iteration method
+__global__ void powerIterationKernel(const float* A, float* eigenvector, 
+                                     float* eigenvalue, int n, int max_iter) {
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    if (idx >= n) return;
+
+    float* v_old = (float*)malloc(n * sizeof(float));
+    float* v_new = (float*)malloc(n * sizeof(float));
+
+    // Initialize eigenvector with random values
+    if (idx == 0) {
+        for (int i = 0; i < n; i++) {
+            v_old[i] = (float)rand() / RAND_MAX;
+        }
+    }
+    __syncthreads();
+
+    for (int iter = 0; iter < max_iter; iter++) {
+        // Matrix-vector multiplication: v_new = A * v_old
+        float sum = 0.0f;
+        for (int j = 0; j < n; j++) {
+            sum += A[idx * n + j] * v_old[j];
+        }
+        v_new[idx] = sum;
+        __syncthreads();
+
+        // Normalize v_new
+        float norm = 0.0f;
+        for (int i = 0; i < n; i++) {
+            norm += v_new[i] * v_new[i];
+        }
+        norm = sqrtf(norm);
+        for (int i = 0; i < n; i++) {
+            v_new[i] /= norm;
+        }
+        __syncthreads();
+
+        // Update v_old for next iteration
+        for (int i = 0; i < n; i++) {
+            v_old[i] = v_new[i];
+        }
+        __syncthreads();
+    }
+
+    // Compute eigenvalue as Rayleigh quotient
+    float rayleigh = 0.0f;
+    for (int j = 0; j < n; j++) {
+        rayleigh += v_old[j] * A[idx * n + j] * v_old[j];
+    }
+    if (idx == 0) {
+        *eigenvalue = rayleigh;
+        for (int i = 0; i < n; i++) {
+            eigenvector[i] = v_old[i];
+        }
+    }
+
+    free(v_old);
+    free(v_new);
+}
