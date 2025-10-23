@@ -1,0 +1,80 @@
+#include 
+#include 
+#include 
+
+// Define tile sizes for Tensor Core operations
+#define TILE_WIDTH 16
+#define TILE_HEIGHT 16
+
+__global__ void tensorCoreConv2D(half* input, half* kernel, half* output, 
+                                 int inputHeight, int inputWidth, 
+                                 int kernelHeight, int kernelWidth, 
+                                 int outputHeight, int outputWidth) {
+    // Shared memory for input and kernel tiles
+    __shared__ half inputTile[TILE_HEIGHT][TILE_WIDTH];
+    __shared__ half kernelTile[TILE_HEIGHT][TILE_WIDTH];
+
+    // Calculate output indices
+    int row = blockIdx.y * TILE_HEIGHT + threadIdx.y;
+    int col = blockIdx.x * TILE_WIDTH + threadIdx.x;
+
+    // Initialize accumulator for Tensor Core operation
+    half acc = __float2half(0.0f);
+
+    // Loop over the kernel dimensions
+    for (int i = 0; i < kernelHeight; i++) {
+        for (int j = 0; j < kernelWidth; j++) {
+            // Load input and kernel tiles into shared memory
+            inputTile[threadIdx.y][threadIdx.x] = input[(row + i) * inputWidth + (col + j)];
+            kernelTile[threadIdx.y][threadIdx.x] = kernel[i * kernelWidth + j];
+            __syncthreads();
+
+            // Perform Tensor Core operation (WMMA API)
+            asm volatile(
+                "mma.sync.aligned.m16n16k16.row.col.f16.f16.f16.f16 "
+                "{%0}, {%1}, {%2}, {%3};"
+                : "=r"(acc)
+                : "r"(inputTile[threadIdx.y][threadIdx.x]), 
+                  "r"(kernelTile[threadIdx.y][threadIdx.x]), 
+                  "r"(acc)
+            );
+            __syncthreads();
+        }
+    }
+
+    // Store the result in the output matrix
+    if (row < outputHeight && col < outputWidth) {
+        output[row * outputWidth + col] = acc;
+    }
+}
+
+int main() {
+    // Initialize input, kernel, and output matrices
+    int inputHeight = 32, inputWidth = 32;
+    int kernelHeight = 3, kernelWidth = 3;
+    int outputHeight = inputHeight - kernelHeight + 1;
+    int outputWidth = inputWidth - kernelWidth + 1;
+
+    half *d_input, *d_kernel, *d_output;
+    cudaMalloc(&d_input, inputHeight * inputWidth * sizeof(half));
+    cudaMalloc(&d_kernel, kernelHeight * kernelWidth * sizeof(half));
+    cudaMalloc(&d_output, outputHeight * outputWidth * sizeof(half));
+
+    // Define grid and block dimensions
+    dim3 gridDim((outputWidth + TILE_WIDTH - 1) / TILE_WIDTH, 
+                 (outputHeight + TILE_HEIGHT - 1) / TILE_HEIGHT);
+    dim3 blockDim(TILE_WIDTH, TILE_HEIGHT);
+
+    // Launch the Tensor Core convolution kernel
+    tensorCoreConv2D<<>>(d_input, d_kernel, d_output, 
+                                            inputHeight, inputWidth, 
+                                            kernelHeight, kernelWidth, 
+                                            outputHeight, outputWidth);
+
+    // Free device memory
+    cudaFree(d_input);
+    cudaFree(d_kernel);
+    cudaFree(d_output);
+
+    return 0;
+}
