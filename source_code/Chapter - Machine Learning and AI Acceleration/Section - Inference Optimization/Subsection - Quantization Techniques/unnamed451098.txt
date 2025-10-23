@@ -1,0 +1,13 @@
+__global__ void quantize_kernel(float* input, int8_t* output, float scale, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size) {
+        // Quantize input to int8 using scale factor
+        output[idx] = static_cast(roundf(input[idx] * scale));
+    }
+}
+
+void quantize(float* input, int8_t* output, float scale, int size) {
+    int threads = 256;
+    int blocks = (size + threads - 1) / threads;
+    quantize_kernel<<>>(input, output, scale, size);
+}
