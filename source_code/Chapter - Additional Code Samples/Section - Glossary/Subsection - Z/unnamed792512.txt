@@ -1,0 +1,13 @@
+__global__ void shuffleExample(float *input, float *output, int n) {
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    if (idx < n) {
+        // Load data into a register
+        float val = input[idx];
+
+        // Shuffle the value within the warp
+        float shuffled_val = __shfl_sync(0xffffffff, val, (threadIdx.x + 1) % warpSize);
+
+        // Store the shuffled value
+        output[idx] = shuffled_val;
+    }
+}
