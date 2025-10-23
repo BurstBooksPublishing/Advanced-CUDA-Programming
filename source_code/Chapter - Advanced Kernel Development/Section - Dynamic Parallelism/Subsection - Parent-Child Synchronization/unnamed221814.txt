@@ -1,0 +1,30 @@
+__global__ void parentKernel() {
+    // Allocate shared memory
+    __shared__ int sharedData[32];
+
+    // Initialize shared memory
+    if (threadIdx.x < 32) {
+        sharedData[threadIdx.x] = threadIdx.x;
+    }
+
+    // Synchronize threads within the block
+    __syncthreads();
+
+    // Launch child kernel
+    if (threadIdx.x == 0) {
+        childKernel<<<1, 32>>>(sharedData);
+        // Synchronize child kernel completion
+        cudaDeviceSynchronize();
+    }
+
+    // Use shared data after child kernel completes
+    if (threadIdx.x < 32) {
+        sharedData[threadIdx.x] *= 2;
+    }
+}
+
+__global__ void childKernel(int* data) {
+    // Process data passed from parent kernel
+    int idx = threadIdx.x;
+    data[idx] += 1;
+}
