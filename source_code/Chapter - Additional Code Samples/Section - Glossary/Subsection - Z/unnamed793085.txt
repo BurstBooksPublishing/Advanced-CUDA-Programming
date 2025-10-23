@@ -1,0 +1,48 @@
+#include 
+#include 
+
+// Recursive kernel to perform adaptive computation
+__global__ void adaptiveKernel(int depth, int maxDepth, float *data, int size) {
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    if (idx >= size) return;
+
+    // Base case: if depth exceeds maxDepth, perform computation
+    if (depth >= maxDepth) {
+        data[idx] = data[idx] * 2.0f; // Example computation
+        return;
+    }
+
+    // Recursive case: launch new kernel if depth < maxDepth
+    if (depth < maxDepth) {
+        adaptiveKernel<<<1, size>>>(depth + 1, maxDepth, data, size);
+        cudaDeviceSynchronize(); // Ensure child kernel completes
+    }
+}
+
+int main() {
+    const int size = 1024;
+    const int maxDepth = 3;
+    float h_data[size];
+    float *d_data;
+
+    // Initialize host data
+    for (int i = 0; i < size; i++) {
+        h_data[i] = static_cast(i);
+    }
+
+    // Allocate and copy data to device
+    cudaMalloc((void**)&d_data, size * sizeof(float));
+    cudaMemcpy(d_data, h_data, size * sizeof(float), cudaMemcpyHostToDevice);
+
+    // Launch the adaptive kernel
+    adaptiveKernel<<<1, size>>>(0, maxDepth, d_data, size);
+    cudaDeviceSynchronize(); // Ensure kernel completes
+
+    // Copy results back to host
+    cudaMemcpy(h_data, d_data, size * sizeof(float), cudaMemcpyDeviceToHost);
+
+    // Free device memory
+    cudaFree(d_data);
+
+    return 0;
+}
