@@ -1,0 +1,34 @@
+// Occupancy-Driven Design Example
+__global__ void occupancyOptimizedKernel(float* input, float* output, int N) {
+    // Shared memory allocation for thread block cooperation
+    __shared__ float sharedData[256];
+
+    // Calculate global thread ID
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Ensure thread operates within valid data range
+    if (tid < N) {
+        // Load data into shared memory for coalesced access
+        sharedData[threadIdx.x] = input[tid];
+        __syncthreads();
+
+        // Perform computation using shared memory
+        float result = 0.0f;
+        for (int i = 0; i < 256; i++) {
+            result += sharedData[i] * sharedData[(threadIdx.x + i) % 256];
+        }
+
+        // Store the result back to global memory
+        output[tid] = result;
+    }
+}
+
+// Host function to launch the kernel
+void launchOccupancyOptimizedKernel(float* input, float* output, int N) {
+    // Define block and grid dimensions for optimal occupancy
+    int blockSize = 256; // Optimal block size for occupancy
+    int gridSize = (N + blockSize - 1) / blockSize;
+
+    // Launch the kernel with optimized occupancy
+    occupancyOptimizedKernel<<>>(input, output, N);
+}
