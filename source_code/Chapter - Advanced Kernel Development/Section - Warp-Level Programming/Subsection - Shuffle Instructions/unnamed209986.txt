@@ -1,0 +1,17 @@
+__global__ void shuffleExample(int *data, int *result) {
+    int tid = threadIdx.x;
+    int laneId = tid % warpSize; // Lane ID within the warp
+    int value = data[tid];
+
+    // Shuffle down: Get value from the next lane
+    int shuffledDown = __shfl_down_sync(0xFFFFFFFF, value, 1);
+
+    // Shuffle up: Get value from the previous lane
+    int shuffledUp = __shfl_up_sync(0xFFFFFFFF, value, 1);
+
+    // Shuffle XOR: Exchange values with a lane at a specific offset
+    int shuffledXor = __shfl_xor_sync(0xFFFFFFFF, value, 1);
+
+    // Store the results
+    result[tid] = shuffledDown + shuffledUp + shuffledXor;
+}
