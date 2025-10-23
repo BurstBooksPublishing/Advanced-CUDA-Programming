@@ -1,0 +1,65 @@
+#include 
+#include 
+#include 
+
+// Kernel function to be optimized
+__global__ void vectorAdd(const float* A, const float* B, float* C, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        C[idx] = A[idx] + B[idx];
+    }
+}
+
+int main() {
+    int N = 1 << 20; // Size of vectors
+    size_t size = N * sizeof(float);
+
+    // Allocate host memory
+    float *h_A = (float*)malloc(size);
+    float *h_B = (float*)malloc(size);
+    float *h_C = (float*)malloc(size);
+
+    // Initialize host vectors
+    for (int i = 0; i < N; i++) {
+        h_A[i] = rand() / (float)RAND_MAX;
+        h_B[i] = rand() / (float)RAND_MAX;
+    }
+
+    // Allocate device memory
+    float *d_A, *d_B, *d_C;
+    cudaMalloc(&d_A, size);
+    cudaMalloc(&d_B, size);
+    cudaMalloc(&d_C, size);
+
+    // Copy data from host to device
+    cudaMemcpy(d_A, h_A, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, h_B, size, cudaMemcpyHostToDevice);
+
+    // Define block and grid sizes
+    int blockSize = 256;
+    int gridSize = (N + blockSize - 1) / blockSize;
+
+    // Start profiling
+    nvtxRangePushA("VectorAddKernel");
+
+    // Launch the kernel
+    vectorAdd<<>>(d_A, d_B, d_C, N);
+
+    // Stop profiling
+    nvtxRangePop();
+
+    // Copy result back to host
+    cudaMemcpy(h_C, d_C, size, cudaMemcpyDeviceToHost);
+
+    // Free device memory
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_C);
+
+    // Free host memory
+    free(h_A);
+    free(h_B);
+    free(h_C);
+
+    return 0;
+}
