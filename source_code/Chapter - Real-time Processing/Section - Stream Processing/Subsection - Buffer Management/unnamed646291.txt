@@ -1,0 +1,41 @@
+// CUDA kernel to process data in a stream
+__global__ void processBuffer(float* buffer, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size) {
+        // Perform some computation on the buffer element
+        buffer[idx] = buffer[idx] * 2.0f; // Example operation
+    }
+}
+
+// Function to manage buffer processing using CUDA streams
+void manageBuffer(float* h_buffer, int size, int numStreams) {
+    float *d_buffer;
+    cudaMalloc(&d_buffer, size * sizeof(float));
+
+    // Create CUDA streams
+    cudaStream_t streams[numStreams];
+    for (int i = 0; i < numStreams; i++) {
+        cudaStreamCreate(&streams[i]);
+    }
+
+    // Divide the buffer into chunks for each stream
+    int chunkSize = size / numStreams;
+    for (int i = 0; i < numStreams; i++) {
+        int offset = i * chunkSize;
+        cudaMemcpyAsync(&d_buffer[offset], &h_buffer[offset],
+                        chunkSize * sizeof(float),
+                        cudaMemcpyHostToDevice, streams[i]);
+        processBuffer<<<(chunkSize + 255) / 256, 256, 0, streams[i]>>>
+                      (&d_buffer[offset], chunkSize);
+        cudaMemcpyAsync(&h_buffer[offset], &d_buffer[offset],
+                        chunkSize * sizeof(float),
+                        cudaMemcpyDeviceToHost, streams[i]);
+    }
+
+    // Synchronize streams and clean up
+    for (int i = 0; i < numStreams; i++) {
+        cudaStreamSynchronize(streams[i]);
+        cudaStreamDestroy(streams[i]);
+    }
+    cudaFree(d_buffer);
+}
