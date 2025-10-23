@@ -1,0 +1,85 @@
+#include 
+#include 
+#include 
+
+#define CHECK(call) \
+{ \
+    const cudaError_t error = call; \
+    if (error != cudaSuccess) { \
+        std::cerr << "Error: " << __FILE__ << ":" << __LINE__ << ", " \
+                  << cudaGetErrorString(error) << std::endl; \
+        exit(1); \
+    } \
+}
+
+__global__ void kernel(int *data, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        data[idx] += 1;  // Increment each element by 1
+    }
+}
+
+int main() {
+    const int N = 1 << 20;  // 1M elements
+    const int num_gpus = 2;
+    std::vector h_data(num_gpus);
+    std::vector d_data(num_gpus);
+    std::vector streams(num_gpus);
+
+    // Initialize data and streams for each GPU
+    for (int i = 0; i < num_gpus; ++i) {
+        CHECK(cudaSetDevice(i));
+        h_data[i] = new int[N];
+        CHECK(cudaMalloc(&d_data[i], N * sizeof(int)));
+        CHECK(cudaStreamCreate(&streams[i]));
+
+        // Initialize host data
+        for (int j = 0; j < N; ++j) {
+            h_data[i][j] = j;
+        }
+
+        // Copy data to device
+        CHECK(cudaMemcpyAsync(d_data[i], h_data[i], N * sizeof(int), 
+                              cudaMemcpyHostToDevice, streams[i]));
+    }
+
+    // Launch kernel on each GPU
+    for (int i = 0; i < num_gpus; ++i) {
+        CHECK(cudaSetDevice(i));
+        kernel<<<(N + 255) / 256, 256, 0, streams[i]>>>(d_data[i], N);
+    }
+
+    // Synchronize streams across GPUs
+    for (int i = 0; i < num_gpus; ++i) {
+        CHECK(cudaSetDevice(i));
+        CHECK(cudaStreamSynchronize(streams[i]));
+    }
+
+    // Copy data back to host and verify
+    for (int i = 0; i < num_gpus; ++i) {
+        CHECK(cudaSetDevice(i));
+        CHECK(cudaMemcpyAsync(h_data[i], d_data[i], N * sizeof(int), 
+                              cudaMemcpyDeviceToHost, streams[i]));
+        CHECK(cudaStreamSynchronize(streams[i]));
+
+        // Verify results
+        for (int j = 0; j < N; ++j) {
+            if (h_data[i][j] != j + 1) {
+                std::cerr << "Error: Verification failed on GPU " << i 
+                          << " at index " << j << std::endl;
+                exit(1);
+            }
+        }
+    }
+
+    // Cleanup
+    for (int i = 0; i < num_gpus; ++i) {
+        CHECK(cudaSetDevice(i));
+        CHECK(cudaFree(d_data[i]));
+        CHECK(cudaStreamDestroy(streams[i]));
+        delete[] h_data[i];
+    }
+
+    std::cout << "Success: All GPUs completed their tasks correctly!" << std::endl;
+    return 0;
+}
