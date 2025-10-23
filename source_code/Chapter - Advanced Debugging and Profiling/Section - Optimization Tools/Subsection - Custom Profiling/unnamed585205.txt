@@ -1,0 +1,46 @@
+#include <cuda_runtime.h>
+#include <nvToolsExt.h>
+#include <iostream>
+
+__global__ void customKernel(float* data, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        data[idx] = data[idx] * 2.0f; // Simple operation for profiling
+    }
+}
+
+int main() {
+    int N = 1 << 20; // 1 million elements
+    size_t size = N * sizeof(float);
+    float* h_data = (float*)malloc(size);
+    float* d_data;
+    cudaMalloc(&d_data, size);
+
+    // Initialize host data
+    for (int i = 0; i < N; i++) {
+        h_data[i] = static_cast(i);
+    }
+
+    // Copy data to device
+    cudaMemcpy(d_data, h_data, size, cudaMemcpyHostToDevice);
+
+    // Start custom profiling with nvToolsExt
+    nvtxRangePushA("Custom Kernel Execution");
+
+    // Launch kernel
+    int threadsPerBlock = 256;
+    int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
+    customKernel<<>>(d_data, N);
+
+    // End custom profiling
+    nvtxRangePop();
+
+    // Copy data back to host
+    cudaMemcpy(h_data, d_data, size, cudaMemcpyDeviceToHost);
+
+    // Cleanup
+    cudaFree(d_data);
+    free(h_data);
+
+    return 0;
+}
