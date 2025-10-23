@@ -1,0 +1,33 @@
+// CUDA kernel to demonstrate ray tracing using RT cores
+__global__ void rayTraceKernel(float* image, float* sceneData, int width, int height) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (x < width && y < height) {
+        // Initialize ray origin and direction
+        float3 rayOrigin = make_float3(x, y, 0.0f);
+        float3 rayDirection = normalize(make_float3(0.0f, 0.0f, -1.0f));
+
+        // Trace ray using RT cores
+        float3 color = traceRay(rayOrigin, rayDirection, sceneData);
+
+        // Store the resulting color in the image buffer
+        int index = y * width + x;
+        image[index] = color.x; // Red channel
+        image[index + 1] = color.y; // Green channel
+        image[index + 2] = color.z; // Blue channel
+    }
+}
+
+// Host function to launch the ray tracing kernel
+void launchRayTrace(float* image, float* sceneData, int width, int height) {
+    dim3 blockSize(16, 16);
+    dim3 gridSize((width + blockSize.x - 1) / blockSize.x, 
+                  (height + blockSize.y - 1) / blockSize.y);
+
+    // Launch the kernel
+    rayTraceKernel<<>>(image, sceneData, width, height);
+
+    // Synchronize to ensure kernel completion
+    cudaDeviceSynchronize();
+}
