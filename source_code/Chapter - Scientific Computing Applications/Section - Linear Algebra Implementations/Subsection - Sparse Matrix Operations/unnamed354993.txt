@@ -1,0 +1,24 @@
+// CUDA kernel for sparse matrix-vector multiplication (SpMV)
+__global__ void spmv_csr_kernel(int num_rows, const int *row_ptr, 
+                                 const int *col_idx, const float *values, 
+                                 const float *x, float *y) {
+    int row = blockIdx.x * blockDim.x + threadIdx.x;
+    if (row < num_rows) {
+        float dot_product = 0.0f;
+        int row_start = row_ptr[row];
+        int row_end = row_ptr[row + 1];
+        for (int j = row_start; j < row_end; j++) {
+            dot_product += values[j] * x[col_idx[j]];
+        }
+        y[row] = dot_product;
+    }
+}
+
+// Host function to launch SpMV kernel
+void spmv_csr(int num_rows, const int *row_ptr, const int *col_idx, 
+              const float *values, const float *x, float *y) {
+    int threads_per_block = 256;
+    int num_blocks = (num_rows + threads_per_block - 1) / threads_per_block;
+    spmv_csr_kernel<<>>(num_rows, row_ptr, 
+                                                       col_idx, values, x, y);
+}
