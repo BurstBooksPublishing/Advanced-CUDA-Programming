@@ -1,0 +1,59 @@
+// CUDA kernel for dynamic load balancing across multiple GPUs
+__global__ void dynamicLoadBalancingKernel(float* data, int* workload, int num_elements, int num_gpus) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    int elements_per_gpu = num_elements / num_gpus;
+    int gpu_id = tid / elements_per_gpu;
+
+    // Ensure the GPU ID is within bounds
+    if (gpu_id >= num_gpus) return;
+
+    // Calculate the starting index for the current GPU
+    int start_idx = gpu_id * elements_per_gpu;
+    int end_idx = (gpu_id + 1) * elements_per_gpu;
+
+    // Process the workload assigned to the current GPU
+    for (int i = start_idx; i < end_idx; i++) {
+        if (i < num_elements) {
+            // Perform computation on the data
+            data[i] = data[i] * workload[i];
+        }
+    }
+}
+
+// Host function to manage multi-GPU workload distribution
+void multiGPULoadBalancing(float* h_data, int* h_workload, int num_elements, int num_gpus) {
+    float* d_data[num_gpus];
+    int* d_workload[num_gpus];
+    size_t size = num_elements * sizeof(float);
+
+    // Allocate memory and copy data to each GPU
+    for (int i = 0; i < num_gpus; i++) {
+        cudaSetDevice(i);
+        cudaMalloc(&d_data[i], size);
+        cudaMalloc(&d_workload[i], size);
+        cudaMemcpy(d_data[i], h_data, size, cudaMemcpyHostToDevice);
+        cudaMemcpy(d_workload[i], h_workload, size, cudaMemcpyHostToDevice);
+    }
+
+    // Launch the kernel on each GPU
+    int threads_per_block = 256;
+    int blocks_per_grid = (num_elements + threads_per_block - 1) / threads_per_block;
+    for (int i = 0; i < num_gpus; i++) {
+        cudaSetDevice(i);
+        dynamicLoadBalancingKernel<<>>(d_data[i], d_workload[i], num_elements, num_gpus);
+    }
+
+    // Synchronize all GPUs
+    for (int i = 0; i < num_gpus; i++) {
+        cudaSetDevice(i);
+        cudaDeviceSynchronize();
+    }
+
+    // Copy results back to the host
+    for (int i = 0; i < num_gpus; i++) {
+        cudaSetDevice(i);
+        cudaMemcpy(h_data, d_data[i], size, cudaMemcpyDeviceToHost);
+        cudaFree(d_data[i]);
+        cudaFree(d_workload[i]);
+    }
+}
