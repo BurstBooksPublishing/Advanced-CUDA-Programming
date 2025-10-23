@@ -1,0 +1,84 @@
+#include 
+#include 
+#include 
+
+#define BLOCK_SIZE 256
+
+__global__ void bfs_kernel(int* adjList, int* adjIndex, int* distances, 
+                           int numNodes, int currentLevel) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < numNodes && distances[idx] == currentLevel) {
+        for (int i = adjIndex[idx]; i < adjIndex[idx + 1]; ++i) {
+            int neighbor = adjList[i];
+            if (distances[neighbor] == -1) {
+                distances[neighbor] = currentLevel + 1;
+            }
+        }
+    }
+}
+
+void bfs_gpu(int* adjList, int* adjIndex, int* distances, int numNodes, 
+             int startNode) {
+    int* d_adjList, *d_adjIndex, *d_distances;
+    cudaMalloc(&d_adjList, sizeof(int) * adjIndex[numNodes]);
+    cudaMalloc(&d_adjIndex, sizeof(int) * (numNodes + 1));
+    cudaMalloc(&d_distances, sizeof(int) * numNodes);
+
+    cudaMemcpy(d_adjList, adjList, sizeof(int) * adjIndex[numNodes], 
+               cudaMemcpyHostToDevice);
+    cudaMemcpy(d_adjIndex, adjIndex, sizeof(int) * (numNodes + 1), 
+               cudaMemcpyHostToDevice);
+    cudaMemcpy(d_distances, distances, sizeof(int) * numNodes, 
+               cudaMemcpyHostToDevice);
+
+    int currentLevel = 0;
+    distances[startNode] = 0;
+    cudaMemcpy(&d_distances[startNode], &distances[startNode], sizeof(int), 
+               cudaMemcpyHostToDevice);
+
+    while (true) {
+        bfs_kernel<<<(numNodes + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE>>>(
+            d_adjList, d_adjIndex, d_distances, numNodes, currentLevel);
+        cudaDeviceSynchronize();
+
+        int* h_distances = new int[numNodes];
+        cudaMemcpy(h_distances, d_distances, sizeof(int) * numNodes, 
+                   cudaMemcpyDeviceToHost);
+
+        bool done = true;
+        for (int i = 0; i < numNodes; ++i) {
+            if (h_distances[i] == currentLevel + 1) {
+                done = false;
+                break;
+            }
+        }
+
+        delete[] h_distances;
+        if (done) break;
+        currentLevel++;
+    }
+
+    cudaMemcpy(distances, d_distances, sizeof(int) * numNodes, 
+               cudaMemcpyDeviceToHost);
+
+    cudaFree(d_adjList);
+    cudaFree(d_adjIndex);
+    cudaFree(d_distances);
+}
+
+int main() {
+    // Example adjacency list and index for a small graph
+    int adjList[] = {1, 2, 0, 2, 0, 1};
+    int adjIndex[] = {0, 2, 4, 6};
+    int numNodes = 3;
+    int distances[numNodes];
+    std::fill(distances, distances + numNodes, -1);
+
+    bfs_gpu(adjList, adjIndex, distances, numNodes, 0);
+
+    for (int i = 0; i < numNodes; ++i) {
+        std::cout << "Distance to node " << i << ": " << distances[i] << std::endl;
+    }
+
+    return 0;
+}
