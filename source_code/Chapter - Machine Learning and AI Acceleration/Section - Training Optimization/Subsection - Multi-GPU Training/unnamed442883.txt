@@ -1,0 +1,84 @@
+#include 
+#include 
+#include 
+
+#define CHECK(call) \
+{ \
+    const cudaError_t error = call; \
+    if (error != cudaSuccess) { \
+        std::cerr << "Error: " << __FILE__ << ":" << __LINE__ << ", " \
+                  << cudaGetErrorString(error) << std::endl; \
+        exit(1); \
+    } \
+}
+
+void multi_gpu_training(float* data, int data_size, int num_gpus) {
+    ncclComm_t comms[num_gpus];
+    cudaStream_t streams[num_gpus];
+    float* d_data[num_gpus];
+    int chunk_size = data_size / num_gpus;
+
+    // Initialize NCCL
+    ncclCommInitAll(comms, num_gpus, NULL);
+
+    // Allocate memory and create streams for each GPU
+    for (int i = 0; i < num_gpus; ++i) {
+        CHECK(cudaSetDevice(i));
+        CHECK(cudaMalloc(&d_data[i], chunk_size * sizeof(float)));
+        CHECK(cudaStreamCreate(&streams[i]));
+    }
+
+    // Scatter data across GPUs
+    for (int i = 0; i < num_gpus; ++i) {
+        CHECK(cudaSetDevice(i));
+        CHECK(cudaMemcpyAsync(d_data[i], data + i * chunk_size, 
+                              chunk_size * sizeof(float), 
+                              cudaMemcpyHostToDevice, streams[i]));
+    }
+
+    // Perform training on each GPU
+    for (int i = 0; i < num_gpus; ++i) {
+        CHECK(cudaSetDevice(i));
+        // Example training kernel call
+        // training_kernel<<>>(d_data[i], chunk_size);
+        cudaStreamSynchronize(streams[i]);
+    }
+
+    // Gather results back to host
+    for (int i = 0; i < num_gpus; ++i) {
+        CHECK(cudaSetDevice(i));
+        CHECK(cudaMemcpyAsync(data + i * chunk_size, d_data[i], 
+                              chunk_size * sizeof(float), 
+                              cudaMemcpyDeviceToHost, streams[i]));
+    }
+
+    // Synchronize all GPUs
+    for (int i = 0; i < num_gpus; ++i) {
+        CHECK(cudaSetDevice(i));
+        cudaStreamSynchronize(streams[i]);
+    }
+
+    // Clean up
+    for (int i = 0; i < num_gpus; ++i) {
+        CHECK(cudaSetDevice(i));
+        cudaFree(d_data[i]);
+        cudaStreamDestroy(streams[i]);
+    }
+    ncclCommDestroy(comms[0]); // Destroy all comms
+}
+
+int main() {
+    int data_size = 1024 * 1024;
+    int num_gpus = 2;
+    float* data = new float[data_size];
+
+    // Initialize data
+    for (int i = 0; i < data_size; ++i) {
+        data[i] = static_cast(i);
+    }
+
+    multi_gpu_training(data, data_size, num_gpus);
+
+    delete[] data;
+    return 0;
+}
