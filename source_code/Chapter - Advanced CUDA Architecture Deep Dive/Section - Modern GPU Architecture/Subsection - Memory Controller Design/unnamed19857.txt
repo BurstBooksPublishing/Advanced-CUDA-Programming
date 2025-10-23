@@ -1,0 +1,23 @@
+__global__ void memoryControllerKernel(float* input, float* output, int size) {
+    // Shared memory declaration for efficient data access
+    __shared__ float sharedMem[256];
+
+    // Calculate thread ID and stride
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    int stride = blockDim.x * gridDim.x;
+
+    // Loop through data with stride to optimize memory access
+    for (int i = tid; i < size; i += stride) {
+        // Load data into shared memory for coalesced access
+        sharedMem[threadIdx.x] = input[i];
+
+        // Synchronize threads to ensure shared memory is populated
+        __syncthreads();
+
+        // Perform computation using shared memory
+        float result = sharedMem[threadIdx.x] * 2.0f;
+
+        // Store result back to global memory
+        output[i] = result;
+    }
+}
