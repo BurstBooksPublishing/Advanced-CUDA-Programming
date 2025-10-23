@@ -1,0 +1,62 @@
+#include 
+#include 
+
+#define N 1024 * 1024
+
+__global__ void kernel(float *d_out, float *d_in, int n) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        d_out[idx] = d_in[idx] * d_in[idx];
+    }
+}
+
+int main() {
+    float *h_in, *h_out;
+    float *d_in, *d_out;
+    cudaStream_t stream;
+
+    // Allocate host memory
+    h_in = (float *)malloc(N * sizeof(float));
+    h_out = (float *)malloc(N * sizeof(float));
+
+    // Allocate device memory
+    cudaMalloc((void **)&d_in, N * sizeof(float));
+    cudaMalloc((void **)&d_out, N * sizeof(float));
+
+    // Initialize host data
+    for (int i = 0; i < N; i++) {
+        h_in[i] = static_cast(i);
+    }
+
+    // Create a CUDA stream
+    cudaStreamCreate(&stream);
+
+    // Asynchronously transfer data to device
+    cudaMemcpyAsync(d_in, h_in, N * sizeof(float), cudaMemcpyHostToDevice, stream);
+
+    // Launch kernel in the same stream
+    kernel<<<(N + 255) / 256, 256, 0, stream>>>(d_out, d_in, N);
+
+    // Asynchronously transfer data back to host
+    cudaMemcpyAsync(h_out, d_out, N * sizeof(float), cudaMemcpyDeviceToHost, stream);
+
+    // Synchronize the stream to ensure all operations are complete
+    cudaStreamSynchronize(stream);
+
+    // Verify the result
+    for (int i = 0; i < N; i++) {
+        if (h_out[i] != h_in[i] * h_in[i]) {
+            std::cerr << "Error at index " << i << std::endl;
+            break;
+        }
+    }
+
+    // Cleanup
+    cudaFree(d_in);
+    cudaFree(d_out);
+    free(h_in);
+    free(h_out);
+    cudaStreamDestroy(stream);
+
+    return 0;
+}
