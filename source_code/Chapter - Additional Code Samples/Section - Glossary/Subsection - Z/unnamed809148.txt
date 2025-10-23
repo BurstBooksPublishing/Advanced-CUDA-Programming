@@ -1,0 +1,59 @@
+// CUDA C++ code implementing thread coarsening for workload balancing
+__global__ void threadCoarseningKernel(float* input, float* output, int N) {
+    // Calculate the global thread ID
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Coarsening factor: each thread processes 4 elements
+    const int coarseningFactor = 4;
+    int stride = gridDim.x * blockDim.x * coarseningFactor;
+
+    // Loop over the input array with coarsening
+    for (int i = tid * coarseningFactor; i < N; i += stride) {
+        // Process multiple elements per thread
+        for (int j = 0; j < coarseningFactor && (i + j) < N; ++j) {
+            output[i + j] = input[i + j] * input[i + j]; // Example computation
+        }
+    }
+}
+
+int main() {
+    int N = 1 << 20; // Size of the input array
+    size_t size = N * sizeof(float);
+
+    // Allocate host memory
+    float* h_input = (float*)malloc(size);
+    float* h_output = (float*)malloc(size);
+
+    // Initialize input array
+    for (int i = 0; i < N; ++i) {
+        h_input[i] = static_cast(i);
+    }
+
+    // Allocate device memory
+    float *d_input, *d_output;
+    cudaMalloc(&d_input, size);
+    cudaMalloc(&d_output, size);
+
+    // Copy input data to device
+    cudaMemcpy(d_input, h_input, size, cudaMemcpyHostToDevice);
+
+    // Define block and grid dimensions
+    int threadsPerBlock = 256;
+    int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
+
+    // Launch the kernel with thread coarsening
+    threadCoarseningKernel<<>>(d_input, d_output, N);
+
+    // Copy result back to host
+    cudaMemcpy(h_output, d_output, size, cudaMemcpyDeviceToHost);
+
+    // Free device memory
+    cudaFree(d_input);
+    cudaFree(d_output);
+
+    // Free host memory
+    free(h_input);
+    free(h_output);
+
+    return 0;
+}
