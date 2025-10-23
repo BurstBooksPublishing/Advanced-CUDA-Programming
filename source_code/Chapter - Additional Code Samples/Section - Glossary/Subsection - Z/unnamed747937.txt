@@ -1,0 +1,77 @@
+// CUDA C++ code demonstrating instruction-level parallelism (ILP)
+// for increased throughput in the context of advanced thread execution model.
+
+__global__ void ILP_Kernel(float* A, float* B, float* C, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Each thread processes 4 elements to exploit ILP
+    if (idx * 4 < N) {
+        float a0 = A[idx * 4];
+        float a1 = A[idx * 4 + 1];
+        float a2 = A[idx * 4 + 2];
+        float a3 = A[idx * 4 + 3];
+
+        float b0 = B[idx * 4];
+        float b1 = B[idx * 4 + 1];
+        float b2 = B[idx * 4 + 2];
+        float b3 = B[idx * 4 + 3];
+
+        // Perform independent computations to maximize ILP
+        float c0 = a0 + b0;
+        float c1 = a1 + b1;
+        float c2 = a2 + b2;
+        float c3 = a3 + b3;
+
+        // Store results back to global memory
+        C[idx * 4] = c0;
+        C[idx * 4 + 1] = c1;
+        C[idx * 4 + 2] = c2;
+        C[idx * 4 + 3] = c3;
+    }
+}
+
+int main() {
+    int N = 1024; // Size of the arrays
+    size_t size = N * sizeof(float);
+
+    // Allocate host memory
+    float *h_A = (float*)malloc(size);
+    float *h_B = (float*)malloc(size);
+    float *h_C = (float*)malloc(size);
+
+    // Initialize host arrays
+    for (int i = 0; i < N; i++) {
+        h_A[i] = static_cast(i);
+        h_B[i] = static_cast(i * 2);
+    }
+
+    // Allocate device memory
+    float *d_A, *d_B, *d_C;
+    cudaMalloc(&d_A, size);
+    cudaMalloc(&d_B, size);
+    cudaMalloc(&d_C, size);
+
+    // Copy data to device
+    cudaMemcpy(d_A, h_A, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, h_B, size, cudaMemcpyHostToDevice);
+
+    // Launch kernel with ILP optimization
+    int threadsPerBlock = 256;
+    int blocksPerGrid = (N + threadsPerBlock * 4 - 1) / (threadsPerBlock * 4);
+    ILP_Kernel<<>>(d_A, d_B, d_C, N);
+
+    // Copy result back to host
+    cudaMemcpy(h_C, d_C, size, cudaMemcpyDeviceToHost);
+
+    // Free device memory
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_C);
+
+    // Free host memory
+    free(h_A);
+    free(h_B);
+    free(h_C);
+
+    return 0;
+}
