@@ -1,0 +1,78 @@
+// CUDA kernel to analyze performance of matrix multiplication
+__global__ void matrixMulPerfAnalysis(float* A, float* B, float* C, int N) {
+    // Calculate row and column index of the element
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Check if the thread is within the matrix bounds
+    if (row < N && col < N) {
+        float value = 0.0f;
+        // Perform dot product of row of A and column of B
+        for (int k = 0; k < N; ++k) {
+            value += A[row * N + k] * B[k * N + col];
+        }
+        // Store the result in matrix C
+        C[row * N + col] = value;
+    }
+}
+
+// Function to measure performance of matrix multiplication
+void measureMatrixMulPerformance(int N) {
+    // Allocate host memory for matrices A, B, and C
+    float *h_A = (float*)malloc(N * N * sizeof(float));
+    float *h_B = (float*)malloc(N * N * sizeof(float));
+    float *h_C = (float*)malloc(N * N * sizeof(float));
+
+    // Initialize matrices A and B with random values
+    for (int i = 0; i < N * N; ++i) {
+        h_A[i] = static_cast(rand()) / RAND_MAX;
+        h_B[i] = static_cast(rand()) / RAND_MAX;
+    }
+
+    // Allocate device memory for matrices A, B, and C
+    float *d_A, *d_B, *d_C;
+    cudaMalloc(&d_A, N * N * sizeof(float));
+    cudaMalloc(&d_B, N * N * sizeof(float));
+    cudaMalloc(&d_C, N * N * sizeof(float));
+
+    // Copy matrices A and B from host to device
+    cudaMemcpy(d_A, h_A, N * N * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, h_B, N * N * sizeof(float), cudaMemcpyHostToDevice);
+
+    // Define block and grid dimensions
+    dim3 threadsPerBlock(16, 16);
+    dim3 blocksPerGrid((N + threadsPerBlock.x - 1) / threadsPerBlock.x,
+                        (N + threadsPerBlock.y - 1) / threadsPerBlock.y);
+
+    // Create CUDA events for timing
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
+    // Record start event
+    cudaEventRecord(start);
+
+    // Launch the matrix multiplication kernel
+    matrixMulPerfAnalysis<<>>(d_A, d_B, d_C, N);
+
+    // Record stop event
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
+
+    // Calculate elapsed time
+    float milliseconds = 0;
+    cudaEventElapsedTime(&milliseconds, start, stop);
+
+    // Print the execution time
+    printf("Matrix multiplication of size %dx%d took %.3f ms\n", N, N, milliseconds);
+
+    // Free device memory
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_C);
+
+    // Free host memory
+    free(h_A);
+    free(h_B);
+    free(h_C);
+}
