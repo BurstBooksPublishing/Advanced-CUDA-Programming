@@ -1,0 +1,22 @@
+// CUDA C++ code illustrating warp-level primitives for optimized performance on Ampere GPUs
+__global__ void warpLevelPrimitives(float* input, float* output, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        // Warp-level reduction using __shfl_down_sync
+        float val = input[idx];
+        for (int offset = 16; offset > 0; offset /= 2) {
+            val += __shfl_down_sync(0xFFFFFFFF, val, offset);
+        }
+        
+        // Warp-level broadcast using __shfl_sync
+        float broadcastVal = __shfl_sync(0xFFFFFFFF, val, 0);
+        
+        // Warp-level vote using __ballot_sync
+        int voteResult = __ballot_sync(0xFFFFFFFF, val > 0.5f);
+        
+        // Store the results
+        if (threadIdx.x % 32 == 0) {
+            output[idx / 32] = broadcastVal + (voteResult ? 1.0f : 0.0f);
+        }
+    }
+}
