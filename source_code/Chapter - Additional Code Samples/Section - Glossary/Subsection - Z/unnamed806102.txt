@@ -1,0 +1,51 @@
+// CUDA C++ implementation of constant memory optimization
+
+#include 
+#include 
+
+#define N 1024
+
+// Constant memory declaration
+__constant__ int constData[N];
+
+// Kernel function using constant memory
+__global__ void kernel(int* output) {
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    if (idx < N) {
+        // Access constant memory
+        output[idx] = constData[idx] * 2;
+    }
+}
+
+int main() {
+    int h_data[N], h_output[N];
+    int *d_output;
+
+    // Initialize host data
+    for (int i = 0; i < N; i++) {
+        h_data[i] = i;
+    }
+
+    // Copy data to constant memory
+    cudaMemcpyToSymbol(constData, h_data, N * sizeof(int));
+
+    // Allocate device memory for output
+    cudaMalloc((void**)&d_output, N * sizeof(int));
+
+    // Launch kernel
+    kernel<<<(N + 255) / 256, 256>>>(d_output);
+
+    // Copy result back to host
+    cudaMemcpy(h_output, d_output, N * sizeof(int), cudaMemcpyDeviceToHost);
+
+    // Free device memory
+    cudaFree(d_output);
+
+    // Print results
+    for (int i = 0; i < N; i++) {
+        std::cout << h_output[i] << " ";
+    }
+    std::cout << std::endl;
+
+    return 0;
+}
