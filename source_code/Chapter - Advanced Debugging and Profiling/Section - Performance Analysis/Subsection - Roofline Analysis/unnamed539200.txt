@@ -1,0 +1,26 @@
+// CUDA kernel for matrix multiplication with Roofline Analysis
+__global__ void matrixMul(float* C, const float* A, const float* B, int N) {
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    float value = 0.0f;
+
+    if (row < N && col < N) {
+        for (int k = 0; k < N; ++k) {
+            value += A[row * N + k] * B[k * N + col]; // Compute dot product
+        }
+        C[row * N + col] = value; // Store result in matrix C
+    }
+}
+
+// Function to perform Roofline Analysis
+void rooflineAnalysis(float* C, const float* A, const float* B, int N) {
+    int blockSize = 16; // Define block size
+    dim3 dimBlock(blockSize, blockSize);
+    dim3 dimGrid((N + blockSize - 1) / blockSize, (N + blockSize - 1) / blockSize);
+
+    // Launch matrix multiplication kernel
+    matrixMul<<>>(C, A, B, N);
+
+    // Synchronize to ensure kernel completion
+    cudaDeviceSynchronize();
+}
