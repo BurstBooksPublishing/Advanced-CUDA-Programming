@@ -1,0 +1,59 @@
+#include 
+#include 
+#include 
+
+// Define the size of the dataset and batch size
+const int DATASET_SIZE = 1000000;
+const int BATCH_SIZE = 1000;
+
+// Kernel to process a batch of data
+__global__ void processBatch(float* data, float* output, int batchSize) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < batchSize) {
+        // Example computation: square the input
+        output[idx] = data[idx] * data[idx];
+    }
+}
+
+int main() {
+    // Allocate host memory for the dataset and output
+    std::vector h_data(DATASET_SIZE);
+    std::vector h_output(DATASET_SIZE);
+
+    // Initialize the dataset with some values
+    for (int i = 0; i < DATASET_SIZE; ++i) {
+        h_data[i] = static_cast(i);
+    }
+
+    // Allocate device memory for the dataset and output
+    float *d_data, *d_output;
+    cudaMalloc(&d_data, DATASET_SIZE * sizeof(float));
+    cudaMalloc(&d_output, DATASET_SIZE * sizeof(float));
+
+    // Copy the dataset to the device
+    cudaMemcpy(d_data, h_data.data(), DATASET_SIZE * sizeof(float), cudaMemcpyHostToDevice);
+
+    // Process the dataset in batches
+    for (int i = 0; i < DATASET_SIZE; i += BATCH_SIZE) {
+        int currentBatchSize = std::min(BATCH_SIZE, DATASET_SIZE - i);
+
+        // Launch the kernel to process the current batch
+        int threadsPerBlock = 256;
+        int blocksPerGrid = (currentBatchSize + threadsPerBlock - 1) / threadsPerBlock;
+        processBatch<<>>(d_data + i, d_output + i, currentBatchSize);
+
+        // Copy the processed batch back to the host
+        cudaMemcpy(h_output.data() + i, d_output + i, currentBatchSize * sizeof(float), cudaMemcpyDeviceToHost);
+    }
+
+    // Free device memory
+    cudaFree(d_data);
+    cudaFree(d_output);
+
+    // Print the first few results to verify correctness
+    for (int i = 0; i < 10; ++i) {
+        std::cout << "Output[" << i << "] = " << h_output[i] << std::endl;
+    }
+
+    return 0;
+}
