@@ -1,0 +1,66 @@
+// CUDA kernel for continuous processing using streams
+__global__ void continuousProcessingKernel(float* input, float* output, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        // Perform continuous processing on input data
+        output[idx] = input[idx] * 2.0f; // Example operation
+    }
+}
+
+int main() {
+    int N = 1 << 20; // Size of data
+    size_t size = N * sizeof(float);
+
+    // Allocate host memory
+    float *h_input = (float*)malloc(size);
+    float *h_output = (float*)malloc(size);
+
+    // Initialize input data
+    for (int i = 0; i < N; i++) {
+        h_input[i] = static_cast(i);
+    }
+
+    // Allocate device memory
+    float *d_input, *d_output;
+    cudaMalloc(&d_input, size);
+    cudaMalloc(&d_output, size);
+
+    // Create CUDA streams
+    cudaStream_t stream1, stream2;
+    cudaStreamCreate(&stream1);
+    cudaStreamCreate(&stream2);
+
+    // Divide data into chunks for stream processing
+    int chunkSize = N / 2;
+    int offset = chunkSize;
+
+    // Copy data to device in chunks using streams
+    cudaMemcpyAsync(d_input, h_input, chunkSize * sizeof(float), 
+                    cudaMemcpyHostToDevice, stream1);
+    cudaMemcpyAsync(d_input + offset, h_input + offset, 
+                    chunkSize * sizeof(float), cudaMemcpyHostToDevice, stream2);
+
+    // Launch kernels in streams
+    continuousProcessingKernel<<>>(d_input, d_output, chunkSize);
+    continuousProcessingKernel<<>>(d_input + offset, d_output + offset, chunkSize);
+
+    // Copy results back to host in streams
+    cudaMemcpyAsync(h_output, d_output, chunkSize * sizeof(float), 
+                    cudaMemcpyDeviceToHost, stream1);
+    cudaMemcpyAsync(h_output + offset, d_output + offset, 
+                    chunkSize * sizeof(float), cudaMemcpyDeviceToHost, stream2);
+
+    // Synchronize streams
+    cudaStreamSynchronize(stream1);
+    cudaStreamSynchronize(stream2);
+
+    // Cleanup
+    cudaFree(d_input);
+    cudaFree(d_output);
+    cudaStreamDestroy(stream1);
+    cudaStreamDestroy(stream2);
+    free(h_input);
+    free(h_output);
+
+    return 0;
+}
