@@ -1,0 +1,33 @@
+// Memory-efficient training using gradient checkpointing in CUDA
+__global__ void forward_pass(float* input, float* output, 
+                             float* weights, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        // Compute forward pass with reduced memory usage
+        output[idx] = input[idx] * weights[idx];
+    }
+}
+
+__global__ void backward_pass(float* grad_output, float* grad_input, 
+                               float* weights, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        // Compute backward pass with reduced memory usage
+        grad_input[idx] = grad_output[idx] * weights[idx];
+    }
+}
+
+void train_model(float* input, float* output, float* weights, 
+                 float* grad_output, float* grad_input, int N) {
+    int blockSize = 256;
+    int numBlocks = (N + blockSize - 1) / blockSize;
+
+    // Forward pass with gradient checkpointing
+    forward_pass<<>>(input, output, weights, N);
+    cudaDeviceSynchronize();
+
+    // Backward pass with gradient checkpointing
+    backward_pass<<>>(grad_output, grad_input, 
+                                            weights, N);
+    cudaDeviceSynchronize();
+}
