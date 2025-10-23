@@ -1,0 +1,63 @@
+// CUDA C++ example demonstrating memory coalescing for optimized memory access patterns
+
+__global__ void coalescedMemoryAccess(float* output, const float* input, int width) {
+    // Calculate the row and column index for the current thread
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Ensure the thread is within the bounds of the input matrix
+    if (row < width && col < width) {
+        // Access memory in a coalesced manner by reading consecutive elements
+        // in the same row, which are stored contiguously in memory.
+        float value = input[row * width + col];
+
+        // Perform some computation (e.g., scaling by 2)
+        value *= 2.0f;
+
+        // Write the result back to global memory in a coalesced manner
+        output[row * width + col] = value;
+    }
+}
+
+int main() {
+    int width = 1024; // Size of the square matrix
+    size_t size = width * width * sizeof(float);
+
+    // Allocate host memory for input and output matrices
+    float* h_input = (float*)malloc(size);
+    float* h_output = (float*)malloc(size);
+
+    // Initialize input matrix with some values
+    for (int i = 0; i < width * width; ++i) {
+        h_input[i] = static_cast(i);
+    }
+
+    // Allocate device memory for input and output matrices
+    float *d_input, *d_output;
+    cudaMalloc(&d_input, size);
+    cudaMalloc(&d_output, size);
+
+    // Copy input matrix from host to device
+    cudaMemcpy(d_input, h_input, size, cudaMemcpyHostToDevice);
+
+    // Define block and grid dimensions
+    dim3 blockDim(16, 16); // 16x16 threads per block
+    dim3 gridDim((width + blockDim.x - 1) / blockDim.x,
+                 (width + blockDim.y - 1) / blockDim.y);
+
+    // Launch the kernel with coalesced memory access
+    coalescedMemoryAccess<<>>(d_output, d_input, width);
+
+    // Copy the result matrix from device to host
+    cudaMemcpy(h_output, d_output, size, cudaMemcpyDeviceToHost);
+
+    // Free device memory
+    cudaFree(d_input);
+    cudaFree(d_output);
+
+    // Free host memory
+    free(h_input);
+    free(h_output);
+
+    return 0;
+}
