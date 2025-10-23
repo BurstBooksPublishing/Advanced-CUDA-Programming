@@ -1,0 +1,55 @@
+#include 
+#include 
+
+// Define the number of threads per block
+#define BLOCK_SIZE 256
+
+// Kernel to solve the differential equation using Euler's method
+__global__ void eulerMethod(float* y, float* dydx, float h, int n) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        y[idx] = y[idx] + h * dydx[idx];  // Euler's method update
+    }
+}
+
+int main() {
+    int n = 1000;  // Number of points
+    float h = 0.01f;  // Step size
+    float *y, *dydx;
+    float *d_y, *d_dydx;
+
+    // Allocate host memory
+    y = (float*)malloc(n * sizeof(float));
+    dydx = (float*)malloc(n * sizeof(float));
+
+    // Initialize host arrays
+    for (int i = 0; i < n; i++) {
+        y[i] = 1.0f;  // Initial condition
+        dydx[i] = -y[i];  // dy/dx = -y (example differential equation)
+    }
+
+    // Allocate device memory
+    cudaMalloc((void**)&d_y, n * sizeof(float));
+    cudaMalloc((void**)&d_dydx, n * sizeof(float));
+
+    // Copy data to device
+    cudaMemcpy(d_y, y, n * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_dydx, dydx, n * sizeof(float), cudaMemcpyHostToDevice);
+
+    // Launch the kernel
+    int numBlocks = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    eulerMethod<<>>(d_y, d_dydx, h, n);
+
+    // Copy result back to host
+    cudaMemcpy(y, d_y, n * sizeof(float), cudaMemcpyDeviceToHost);
+
+    // Free device memory
+    cudaFree(d_y);
+    cudaFree(d_dydx);
+
+    // Free host memory
+    free(y);
+    free(dydx);
+
+    return 0;
+}
