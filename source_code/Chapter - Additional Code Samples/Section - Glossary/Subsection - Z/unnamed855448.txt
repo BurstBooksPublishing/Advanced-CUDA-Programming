@@ -1,0 +1,104 @@
+#include 
+#include 
+#include 
+#include 
+
+// Kernel to perform mixed-precision forward pass
+__global__ void mixedPrecisionForward(const float* input, const float* weights, 
+                                      float* output, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        // Convert input and weights to half precision
+        __half h_input = __float2half(input[idx]);
+        __half h_weight = __float2half(weights[idx]);
+        
+        // Perform multiplication in half precision
+        __half h_output = __hmul(h_input, h_weight);
+        
+        // Convert result back to float and store
+        output[idx] = __half2float(h_output);
+    }
+}
+
+// Kernel to perform mixed-precision backward pass
+__global__ void mixedPrecisionBackward(const float* grad_output, const float* input, 
+                                       float* grad_weights, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        // Convert grad_output and input to half precision
+        __half h_grad_output = __float2half(grad_output[idx]);
+        __half h_input = __float2half(input[idx]);
+        
+        // Perform multiplication in half precision
+        __half h_grad_weight = __hmul(h_grad_output, h_input);
+        
+        // Convert result back to float and accumulate
+        atomicAdd(&grad_weights[idx], __half2float(h_grad_weight));
+    }
+}
+
+int main() {
+    int N = 1024; // Number of elements
+    size_t size = N * sizeof(float);
+    
+    // Allocate host memory
+    float *h_input, *h_weights, *h_output, *h_grad_output, *h_grad_weights;
+    h_input = (float*)malloc(size);
+    h_weights = (float*)malloc(size);
+    h_output = (float*)malloc(size);
+    h_grad_output = (float*)malloc(size);
+    h_grad_weights = (float*)malloc(size);
+    
+    // Initialize host arrays
+    for (int i = 0; i < N; i++) {
+        h_input[i] = static_cast(rand()) / RAND_MAX;
+        h_weights[i] = static_cast(rand()) / RAND_MAX;
+        h_grad_output[i] = static_cast(rand()) / RAND_MAX;
+        h_grad_weights[i] = 0.0f;
+    }
+    
+    // Allocate device memory
+    float *d_input, *d_weights, *d_output, *d_grad_output, *d_grad_weights;
+    cudaMalloc(&d_input, size);
+    cudaMalloc(&d_weights, size);
+    cudaMalloc(&d_output, size);
+    cudaMalloc(&d_grad_output, size);
+    cudaMalloc(&d_grad_weights, size);
+    
+    // Copy data to device
+    cudaMemcpy(d_input, h_input, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_weights, h_weights, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_grad_output, h_grad_output, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_grad_weights, h_grad_weights, size, cudaMemcpyHostToDevice);
+    
+    // Define block and grid sizes
+    int blockSize = 256;
+    int gridSize = (N + blockSize - 1) / blockSize;
+    
+    // Perform mixed-precision forward pass
+    mixedPrecisionForward<<>>(d_input, d_weights, d_output, N);
+    
+    // Perform mixed-precision backward pass
+    mixedPrecisionBackward<<>>(d_grad_output, d_input, 
+                                                    d_grad_weights, N);
+    
+    // Copy results back to host
+    cudaMemcpy(h_output, d_output, size, cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_grad_weights, d_grad_weights, size, cudaMemcpyDeviceToHost);
+    
+    // Free device memory
+    cudaFree(d_input);
+    cudaFree(d_weights);
+    cudaFree(d_output);
+    cudaFree(d_grad_output);
+    cudaFree(d_grad_weights);
+    
+    // Free host memory
+    free(h_input);
+    free(h_weights);
+    free(h_output);
+    free(h_grad_output);
+    free(h_grad_weights);
+    
+    return 0;
+}
