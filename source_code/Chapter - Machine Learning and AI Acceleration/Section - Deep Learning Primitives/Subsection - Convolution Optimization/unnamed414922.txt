@@ -1,0 +1,24 @@
+__global__ void optimizedConvolutionKernel(float* input, float* kernel, 
+    float* output, int inputWidth, int kernelWidth, int outputWidth) {
+    // Calculate the output pixel coordinates
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Ensure the thread is within the output bounds
+    if (row < outputWidth && col < outputWidth) {
+        float value = 0.0f;
+        // Iterate over the kernel
+        for (int i = 0; i < kernelWidth; ++i) {
+            for (int j = 0; j < kernelWidth; ++j) {
+                // Calculate the input pixel coordinates
+                int inputRow = row + i;
+                int inputCol = col + j;
+                // Accumulate the convolution result
+                value += input[inputRow * inputWidth + inputCol] * 
+                         kernel[i * kernelWidth + j];
+            }
+        }
+        // Store the result in the output matrix
+        output[row * outputWidth + col] = value;
+    }
+}
