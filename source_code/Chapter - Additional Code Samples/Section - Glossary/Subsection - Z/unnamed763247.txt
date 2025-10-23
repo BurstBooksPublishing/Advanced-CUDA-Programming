@@ -1,0 +1,50 @@
+#include 
+#include 
+
+__global__ void kernel(int *data, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        data[idx] = data[idx] * 2; // Perform some computation
+    }
+}
+
+int main() {
+    int N = 1 << 20; // 1 million elements
+    size_t size = N * sizeof(int);
+
+    // Allocate unified memory
+    int *data;
+    cudaMallocManaged(&data, size);
+
+    // Initialize data on the host
+    for (int i = 0; i < N; i++) {
+        data[i] = i;
+    }
+
+    // Prefetch data to the GPU
+    cudaMemPrefetchAsync(data, size, 0); // 0 is the device ID for the GPU
+
+    // Launch kernel
+    int blockSize = 256;
+    int numBlocks = (N + blockSize - 1) / blockSize;
+    kernel<<>>(data, N);
+
+    // Prefetch data back to the host
+    cudaMemPrefetchAsync(data, size, cudaCpuDeviceId);
+
+    // Synchronize to ensure kernel and prefetch operations are complete
+    cudaDeviceSynchronize();
+
+    // Verify results
+    for (int i = 0; i < N; i++) {
+        if (data[i] != i * 2) {
+            std::cerr << "Error at index " << i << std::endl;
+            break;
+        }
+    }
+
+    // Free unified memory
+    cudaFree(data);
+
+    return 0;
+}
