@@ -1,0 +1,63 @@
+// CUDA C++ implementation of matrix-vector multiplication (BLAS GEMV)
+#include 
+#include 
+
+// Kernel for matrix-vector multiplication
+__global__ void gemv_kernel(const float* A, const float* x, float* y, int M, int N) {
+    int row = blockIdx.x * blockDim.x + threadIdx.x;
+    if (row < M) {
+        float sum = 0.0f;
+        for (int col = 0; col < N; ++col) {
+            sum += A[row * N + col] * x[col]; // Dot product of row and vector
+        }
+        y[row] = sum; // Store result in output vector
+    }
+}
+
+// Host function to perform matrix-vector multiplication
+void gemv(const float* A, const float* x, float* y, int M, int N) {
+    float *d_A, *d_x, *d_y;
+
+    // Allocate device memory
+    cudaMalloc((void**)&d_A, M * N * sizeof(float));
+    cudaMalloc((void**)&d_x, N * sizeof(float));
+    cudaMalloc((void**)&d_y, M * sizeof(float));
+
+    // Copy data to device
+    cudaMemcpy(d_A, A, M * N * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_x, x, N * sizeof(float), cudaMemcpyHostToDevice);
+
+    // Launch kernel
+    int blockSize = 256;
+    int gridSize = (M + blockSize - 1) / blockSize;
+    gemv_kernel<<>>(d_A, d_x, d_y, M, N);
+
+    // Copy result back to host
+    cudaMemcpy(y, d_y, M * sizeof(float), cudaMemcpyDeviceToHost);
+
+    // Free device memory
+    cudaFree(d_A);
+    cudaFree(d_x);
+    cudaFree(d_y);
+}
+
+int main() {
+    int M = 1024, N = 1024; // Matrix dimensions
+    float *A = new float[M * N];
+    float *x = new float[N];
+    float *y = new float[M];
+
+    // Initialize matrix A and vector x
+    for (int i = 0; i < M * N; ++i) A[i] = static_cast(rand()) / RAND_MAX;
+    for (int i = 0; i < N; ++i) x[i] = static_cast(rand()) / RAND_MAX;
+
+    // Perform matrix-vector multiplication
+    gemv(A, x, y, M, N);
+
+    // Cleanup
+    delete[] A;
+    delete[] x;
+    delete[] y;
+
+    return 0;
+}
