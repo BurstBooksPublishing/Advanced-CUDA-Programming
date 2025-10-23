@@ -1,0 +1,57 @@
+#include 
+#include 
+
+// Kernel for element-wise multiplication
+__global__ void complexMultiply(cufftComplex* a, cufftComplex* b, int n) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        cufftComplex c;
+        c.x = a[idx].x * b[idx].x - a[idx].y * b[idx].y;
+        c.y = a[idx].x * b[idx].y + a[idx].y * b[idx].x;
+        a[idx] = c;
+    }
+}
+
+int main() {
+    const int N = 1024; // Size of the FFT
+    cufftComplex *h_data, *d_data;
+    cufftHandle plan;
+
+    // Allocate host and device memory
+    h_data = (cufftComplex*)malloc(N * sizeof(cufftComplex));
+    cudaMalloc((void**)&d_data, N * sizeof(cufftComplex));
+
+    // Initialize host data
+    for (int i = 0; i < N; i++) {
+        h_data[i].x = i;
+        h_data[i].y = 0;
+    }
+
+    // Copy data to device
+    cudaMemcpy(d_data, h_data, N * sizeof(cufftComplex), cudaMemcpyHostToDevice);
+
+    // Create a 1D FFT plan
+    cufftPlan1d(&plan, N, CUFFT_C2C, 1);
+
+    // Execute the forward FFT
+    cufftExecC2C(plan, d_data, d_data, CUFFT_FORWARD);
+
+    // Execute the inverse FFT
+    cufftExecC2C(plan, d_data, d_data, CUFFT_INVERSE);
+
+    // Copy data back to host
+    cudaMemcpy(h_data, d_data, N * sizeof(cufftComplex), cudaMemcpyDeviceToHost);
+
+    // Normalize the result
+    for (int i = 0; i < N; i++) {
+        h_data[i].x /= N;
+        h_data[i].y /= N;
+    }
+
+    // Cleanup
+    cufftDestroy(plan);
+    cudaFree(d_data);
+    free(h_data);
+
+    return 0;
+}
