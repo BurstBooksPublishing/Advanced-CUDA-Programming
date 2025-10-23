@@ -1,0 +1,82 @@
+#include 
+#include 
+#include 
+
+#define HASH_TABLE_SIZE 1024
+#define EMPTY_KEY -1
+
+__device__ int hash(int key) {
+    return key % HASH_TABLE_SIZE;
+}
+
+__global__ void insert(int* hashTable, int* keys, int numKeys) {
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    if (idx < numKeys) {
+        int key = keys[idx];
+        int hashIdx = hash(key);
+        
+        // Linear probing for collision resolution
+        while (atomicCAS(&hashTable[hashIdx], EMPTY_KEY, key) != EMPTY_KEY) {
+            hashIdx = (hashIdx + 1) % HASH_TABLE_SIZE;
+        }
+    }
+}
+
+__global__ void search(int* hashTable, int* keys, int* results, int numKeys) {
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    if (idx < numKeys) {
+        int key = keys[idx];
+        int hashIdx = hash(key);
+        
+        // Linear probing to find the key
+        while (hashTable[hashIdx] != key && hashTable[hashIdx] != EMPTY_KEY) {
+            hashIdx = (hashIdx + 1) % HASH_TABLE_SIZE;
+        }
+        
+        results[idx] = (hashTable[hashIdx] == key) ? 1 : 0;
+    }
+}
+
+int main() {
+    int numKeys = 512;
+    int keys[numKeys];
+    int results[numKeys];
+    int *d_hashTable, *d_keys, *d_results;
+    
+    // Initialize keys with random values
+    for (int i = 0; i < numKeys; i++) {
+        keys[i] = rand() % 1000;
+    }
+    
+    // Allocate and initialize hash table on device
+    cudaMalloc(&d_hashTable, HASH_TABLE_SIZE * sizeof(int));
+    cudaMemset(d_hashTable, EMPTY_KEY, HASH_TABLE_SIZE * sizeof(int));
+    
+    // Allocate memory for keys and results on device
+    cudaMalloc(&d_keys, numKeys * sizeof(int));
+    cudaMalloc(&d_results, numKeys * sizeof(int));
+    
+    // Copy keys to device
+    cudaMemcpy(d_keys, keys, numKeys * sizeof(int), cudaMemcpyHostToDevice);
+    
+    // Insert keys into hash table
+    insert<<<(numKeys + 255) / 256, 256>>>(d_hashTable, d_keys, numKeys);
+    
+    // Search for keys in hash table
+    search<<<(numKeys + 255) / 256, 256>>>(d_hashTable, d_keys, d_results, numKeys);
+    
+    // Copy results back to host
+    cudaMemcpy(results, d_results, numKeys * sizeof(int), cudaMemcpyDeviceToHost);
+    
+    // Print results
+    for (int i = 0; i < numKeys; i++) {
+        printf("Key %d: %s\n", keys[i], results[i] ? "Found" : "Not Found");
+    }
+    
+    // Free device memory
+    cudaFree(d_hashTable);
+    cudaFree(d_keys);
+    cudaFree(d_results);
+    
+    return 0;
+}
