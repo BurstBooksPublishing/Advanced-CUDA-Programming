@@ -1,0 +1,68 @@
+#include 
+#include 
+
+// Define texture memory for a 2D float array
+texture texRef;
+
+__global__ void textureKernel(float* output, int width, int height) {
+    // Calculate thread indices
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    // Check if the thread is within the bounds of the image
+    if (x < width && y < height) {
+        // Use texture memory to read data
+        float value = tex2D(texRef, x, y);
+        // Perform some read-intensive operation (e.g., scaling)
+        output[y * width + x] = value * 2.0f;
+    }
+}
+
+int main() {
+    int width = 512;
+    int height = 512;
+    size_t size = width * height * sizeof(float);
+
+    // Allocate host memory
+    float* h_data = (float*)malloc(size);
+    float* h_output = (float*)malloc(size);
+
+    // Initialize host data
+    for (int i = 0; i < width * height; i++) {
+        h_data[i] = static_cast(i) / (width * height);
+    }
+
+    // Allocate device memory
+    float* d_data;
+    float* d_output;
+    cudaMalloc(&d_data, size);
+    cudaMalloc(&d_output, size);
+
+    // Copy data to device
+    cudaMemcpy(d_data, h_data, size, cudaMemcpyHostToDevice);
+
+    // Bind texture memory
+    cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc();
+    cudaBindTexture2D(0, texRef, d_data, channelDesc, width, height, width * sizeof(float));
+
+    // Define block and grid dimensions
+    dim3 blockDim(16, 16);
+    dim3 gridDim((width + blockDim.x - 1) / blockDim.x, (height + blockDim.y - 1) / blockDim.y);
+
+    // Launch kernel
+    textureKernel<<>>(d_output, width, height);
+
+    // Copy result back to host
+    cudaMemcpy(h_output, d_output, size, cudaMemcpyDeviceToHost);
+
+    // Free device memory
+    cudaUnbindTexture(texRef);
+    cudaFree(d_data);
+    cudaFree(d_output);
+
+    // Free host memory
+    free(h_data);
+    free(h_output);
+
+    return 0;
+}
