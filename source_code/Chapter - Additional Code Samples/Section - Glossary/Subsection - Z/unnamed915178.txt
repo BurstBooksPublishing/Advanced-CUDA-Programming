@@ -1,0 +1,61 @@
+#include 
+#include 
+
+#define N 1024  // Number of elements in the buffer
+
+__global__ void processBuffer(float* input, float* output, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size) {
+        // Perform some computation on the input buffer
+        output[idx] = input[idx] * 2.0f;
+    }
+}
+
+int main() {
+    float *h_input, *h_output;  // Host buffers
+    float *d_input, *d_output;  // Device buffers
+    size_t size = N * sizeof(float);
+
+    // Allocate host memory
+    h_input = (float*)malloc(size);
+    h_output = (float*)malloc(size);
+
+    // Initialize host input buffer
+    for (int i = 0; i < N; i++) {
+        h_input[i] = static_cast(i);
+    }
+
+    // Allocate device memory
+    cudaMalloc(&d_input, size);
+    cudaMalloc(&d_output, size);
+
+    // Copy input data to device
+    cudaMemcpy(d_input, h_input, size, cudaMemcpyHostToDevice);
+
+    // Launch kernel to process the buffer
+    int threadsPerBlock = 256;
+    int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
+    processBuffer<<>>(d_input, d_output, N);
+
+    // Copy result back to host
+    cudaMemcpy(h_output, d_output, size, cudaMemcpyDeviceToHost);
+
+    // Verify the result
+    for (int i = 0; i < N; i++) {
+        if (h_output[i] != h_input[i] * 2.0f) {
+            std::cerr << "Error at index " << i << std::endl;
+            break;
+        }
+    }
+
+    // Free device memory
+    cudaFree(d_input);
+    cudaFree(d_output);
+
+    // Free host memory
+    free(h_input);
+    free(h_output);
+
+    std::cout << "Buffer processing completed successfully." << std::endl;
+    return 0;
+}
