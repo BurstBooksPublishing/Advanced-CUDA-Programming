@@ -1,0 +1,39 @@
+#include 
+#include 
+
+#define N 1000000  // Number of samples
+#define BLOCK_SIZE 256
+
+__global__ void monteCarloPi(float *estimates, int n) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        curandState state;
+        curand_init(clock64(), idx, 0, &state);
+        float x = curand_uniform(&state);
+        float y = curand_uniform(&state);
+        estimates[idx] = (x * x + y * y <= 1.0f) ? 1.0f : 0.0f;
+    }
+}
+
+int main() {
+    float *d_estimates, *h_estimates;
+    h_estimates = (float *)malloc(N * sizeof(float));
+    cudaMalloc(&d_estimates, N * sizeof(float));
+
+    int numBlocks = (N + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    monteCarloPi<<>>(d_estimates, N);
+
+    cudaMemcpy(h_estimates, d_estimates, N * sizeof(float), cudaMemcpyDeviceToHost);
+
+    float pi_estimate = 0.0f;
+    for (int i = 0; i < N; i++) {
+        pi_estimate += h_estimates[i];
+    }
+    pi_estimate = 4.0f * pi_estimate / N;
+
+    printf("Estimated Pi: %f\n", pi_estimate);
+
+    free(h_estimates);
+    cudaFree(d_estimates);
+    return 0;
+}
