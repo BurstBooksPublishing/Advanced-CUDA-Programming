@@ -1,0 +1,46 @@
+__global__ void bfs_kernel(int *adjacency_matrix, int *visited, int *queue, 
+                           int queue_size, int num_nodes) {
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    if (tid < queue_size) {
+        int current_node = queue[tid];
+        for (int i = 0; i < num_nodes; i++) {
+            if (adjacency_matrix[current_node * num_nodes + i] && !visited[i]) {
+                visited[i] = 1; // Mark node as visited
+                queue[queue_size + tid] = i; // Add to queue
+            }
+        }
+    }
+}
+
+void bfs_cuda(int *adjacency_matrix, int *visited, int *queue, 
+              int num_nodes, int start_node) {
+    int *d_adjacency_matrix, *d_visited, *d_queue;
+    cudaMalloc(&d_adjacency_matrix, num_nodes * num_nodes * sizeof(int));
+    cudaMalloc(&d_visited, num_nodes * sizeof(int));
+    cudaMalloc(&d_queue, 2 * num_nodes * sizeof(int));
+
+    cudaMemcpy(d_adjacency_matrix, adjacency_matrix, 
+               num_nodes * num_nodes * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_visited, visited, num_nodes * sizeof(int), 
+               cudaMemcpyHostToDevice);
+    cudaMemcpy(d_queue, queue, 2 * num_nodes * sizeof(int), 
+               cudaMemcpyHostToDevice);
+
+    visited[start_node] = 1;
+    queue[0] = start_node;
+    int queue_size = 1;
+
+    while (queue_size > 0) {
+        bfs_kernel<<<(queue_size + 255) / 256, 256>>>(d_adjacency_matrix, 
+                                                      d_visited, d_queue, 
+                                                      queue_size, num_nodes);
+        cudaDeviceSynchronize();
+        queue_size = 0; // Reset queue size for next iteration
+    }
+
+    cudaMemcpy(visited, d_visited, num_nodes * sizeof(int), 
+               cudaMemcpyDeviceToHost);
+    cudaFree(d_adjacency_matrix);
+    cudaFree(d_visited);
+    cudaFree(d_queue);
+}
