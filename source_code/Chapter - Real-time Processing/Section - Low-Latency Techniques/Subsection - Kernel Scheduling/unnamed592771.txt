@@ -1,0 +1,29 @@
+// CUDA kernel for low-latency real-time processing
+__global__ void lowLatencyKernel(float* input, float* output, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size) {
+        // Perform low-latency computation
+        output[idx] = input[idx] * 2.0f; // Example computation
+    }
+}
+
+// Host function to schedule the kernel with low latency
+void scheduleLowLatencyKernel(float* h_input, float* h_output, int size) {
+    float *d_input, *d_output;
+    cudaMalloc((void**)&d_input, size * sizeof(float));
+    cudaMalloc((void**)&d_output, size * sizeof(float));
+
+    cudaMemcpy(d_input, h_input, size * sizeof(float), cudaMemcpyHostToDevice);
+
+    // Configure kernel launch parameters for low latency
+    int threadsPerBlock = 256;
+    int blocksPerGrid = (size + threadsPerBlock - 1) / threadsPerBlock;
+
+    // Launch kernel with low-latency scheduling
+    lowLatencyKernel<<>>(d_input, d_output, size);
+
+    cudaMemcpy(h_output, d_output, size * sizeof(float), cudaMemcpyDeviceToHost);
+
+    cudaFree(d_input);
+    cudaFree(d_output);
+}
