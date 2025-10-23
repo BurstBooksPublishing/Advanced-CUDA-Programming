@@ -1,0 +1,59 @@
+#include 
+#include 
+#include 
+
+#define N 1024  // Size of the array
+
+__global__ void kernel(int *d_array, int size, int offset) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size) {
+        d_array[idx] += offset;  // Modify array elements based on offset
+    }
+}
+
+int main(int argc, char **argv) {
+    int rank, num_devices;
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &num_devices);
+
+    cudaSetDevice(rank);  // Assign each MPI rank to a different GPU
+
+    int *h_array = (int *)malloc(N * sizeof(int));
+    int *d_array;
+    cudaMalloc((void **)&d_array, N * sizeof(int));
+
+    // Initialize host array
+    for (int i = 0; i < N; i++) {
+        h_array[i] = i;
+    }
+
+    // Copy data to device
+    cudaMemcpy(d_array, h_array, N * sizeof(int), cudaMemcpyHostToDevice);
+
+    // Launch kernel with workload distribution
+    int chunk_size = N / num_devices;
+    int offset = rank * chunk_size;
+    kernel<<<(chunk_size + 255) / 256, 256>>>(d_array + offset, chunk_size, rank);
+
+    // Copy data back to host
+    cudaMemcpy(h_array + offset, d_array + offset, chunk_size * sizeof(int), cudaMemcpyDeviceToHost);
+
+    // Synchronize MPI processes
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    // Print results from each GPU
+    if (rank == 0) {
+        for (int i = 0; i < N; i++) {
+            std::cout << h_array[i] << " ";
+        }
+        std::cout << std::endl;
+    }
+
+    // Free memory
+    free(h_array);
+    cudaFree(d_array);
+
+    MPI_Finalize();
+    return 0;
+}
