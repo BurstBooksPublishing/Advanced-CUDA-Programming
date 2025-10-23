@@ -1,0 +1,29 @@
+__global__ void recursiveKernel(int depth, int maxDepth) {
+    // Base case: stop recursion if max depth is reached
+    if (depth >= maxDepth) {
+        return;
+    }
+
+    // Print current depth
+    printf("Depth: %d, Thread: %d\n", depth, threadIdx.x);
+
+    // Launch a new kernel recursively
+    if (threadIdx.x == 0) {
+        recursiveKernel<<<1, 1>>>(depth + 1, maxDepth);
+    }
+
+    // Synchronize threads to ensure proper execution order
+    __syncthreads();
+}
+
+int main() {
+    int maxDepth = 3;
+
+    // Launch the initial kernel
+    recursiveKernel<<<1, 1>>>(0, maxDepth);
+
+    // Synchronize the device to ensure all kernels complete
+    cudaDeviceSynchronize();
+
+    return 0;
+}
