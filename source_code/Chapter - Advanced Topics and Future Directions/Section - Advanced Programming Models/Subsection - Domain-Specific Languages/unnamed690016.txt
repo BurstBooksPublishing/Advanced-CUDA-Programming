@@ -1,0 +1,39 @@
+// CUDA kernel for a domain-specific language (DSL) example
+// This kernel performs element-wise multiplication on two arrays
+__global__ void dslElementwiseMul(float* A, float* B, float* C, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        // Perform element-wise multiplication
+        C[idx] = A[idx] * B[idx];
+    }
+}
+
+// Host function to launch the DSL kernel
+void launchDSLKernel(float* h_A, float* h_B, float* h_C, int N) {
+    float *d_A, *d_B, *d_C;
+    size_t size = N * sizeof(float);
+
+    // Allocate device memory
+    cudaMalloc(&d_A, size);
+    cudaMalloc(&d_B, size);
+    cudaMalloc(&d_C, size);
+
+    // Copy data to device
+    cudaMemcpy(d_A, h_A, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, h_B, size, cudaMemcpyHostToDevice);
+
+    // Define block and grid dimensions
+    int threadsPerBlock = 256;
+    int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
+
+    // Launch the DSL kernel
+    dslElementwiseMul<<>>(d_A, d_B, d_C, N);
+
+    // Copy result back to host
+    cudaMemcpy(h_C, d_C, size, cudaMemcpyDeviceToHost);
+
+    // Free device memory
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_C);
+}
