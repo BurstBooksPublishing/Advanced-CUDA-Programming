@@ -1,0 +1,52 @@
+#include 
+#include 
+
+__global__ void kernel(float* data, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        data[idx] = data[idx] * 2.0f; // Simple computation
+    }
+}
+
+int main() {
+    int N = 1 << 20; // 1M elements
+    size_t size = N * sizeof(float);
+
+    // Allocate host and device memory
+    float *h_data = (float*)malloc(size);
+    float *d_data;
+    cudaMalloc(&d_data, size);
+
+    // Initialize host data
+    for (int i = 0; i < N; i++) {
+        h_data[i] = static_cast(i);
+    }
+
+    // Create a CUDA stream
+    cudaStream_t stream;
+    cudaStreamCreate(&stream);
+
+    // Asynchronously prefetch data to the GPU
+    cudaMemPrefetchAsync(d_data, size, 0, stream); // Prefetch to device 0
+
+    // Copy data to device asynchronously
+    cudaMemcpyAsync(d_data, h_data, size, cudaMemcpyHostToDevice, stream);
+
+    // Launch kernel in the same stream
+    int threadsPerBlock = 256;
+    int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
+    kernel<<>>(d_data, N);
+
+    // Copy result back to host asynchronously
+    cudaMemcpyAsync(h_data, d_data, size, cudaMemcpyDeviceToHost, stream);
+
+    // Synchronize the stream to ensure all operations are complete
+    cudaStreamSynchronize(stream);
+
+    // Cleanup
+    cudaFree(d_data);
+    free(h_data);
+    cudaStreamDestroy(stream);
+
+    return 0;
+}
