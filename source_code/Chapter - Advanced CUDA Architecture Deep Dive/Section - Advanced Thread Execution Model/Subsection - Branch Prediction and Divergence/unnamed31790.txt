@@ -1,0 +1,13 @@
+__global__ void branchDivergenceKernel(int *data, int *result, int n) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        // Simulate branch divergence
+        if (data[idx] % 2 == 0) {
+            // Even-indexed threads take this path
+            result[idx] = data[idx] * 2;
+        } else {
+            // Odd-indexed threads take this path
+            result[idx] = data[idx] / 2;
+        }
+    }
+}
