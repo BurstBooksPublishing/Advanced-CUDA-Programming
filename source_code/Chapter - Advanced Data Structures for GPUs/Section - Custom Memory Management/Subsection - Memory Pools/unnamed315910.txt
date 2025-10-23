@@ -1,0 +1,63 @@
+// CUDA Memory Pool Implementation
+#include 
+#include 
+
+// Define a memory pool structure
+struct MemoryPool {
+    void* pool;          // Pointer to the memory pool
+    size_t poolSize;     // Total size of the memory pool
+    size_t blockSize;    // Size of each block in the pool
+    bool* isAllocated;   // Track allocation status of each block
+};
+
+// Initialize the memory pool
+__host__ void initializeMemoryPool(MemoryPool& pool, size_t totalSize, 
+                                   size_t blockSize) {
+    pool.poolSize = totalSize;
+    pool.blockSize = blockSize;
+    cudaMalloc(&pool.pool, totalSize);  // Allocate device memory
+    pool.isAllocated = new bool[totalSize / blockSize];
+    memset(pool.isAllocated, 0, totalSize / blockSize);  // Initialize as free
+}
+
+// Allocate a block from the memory pool
+__host__ void* allocateFromPool(MemoryPool& pool) {
+    for (size_t i = 0; i < pool.poolSize / pool.blockSize; ++i) {
+        if (!pool.isAllocated[i]) {
+            pool.isAllocated[i] = true;  // Mark as allocated
+            return static_cast(pool.pool) + i * pool.blockSize;
+        }
+    }
+    return nullptr;  // No free blocks available
+}
+
+// Free a block in the memory pool
+__host__ void freeInPool(MemoryPool& pool, void* ptr) {
+    size_t index = (static_cast(ptr) - 
+                     static_cast(pool.pool)) / pool.blockSize;
+    if (index < pool.poolSize / pool.blockSize) {
+        pool.isAllocated[index] = false;  // Mark as free
+    }
+}
+
+// Clean up the memory pool
+__host__ void cleanupMemoryPool(MemoryPool& pool) {
+    cudaFree(pool.pool);  // Free device memory
+    delete[] pool.isAllocated;  // Free allocation tracking array
+}
+
+// Example usage
+int main() {
+    MemoryPool pool;
+    initializeMemoryPool(pool, 1024 * 1024, 256);  // 1MB pool, 256B blocks
+
+    void* block1 = allocateFromPool(pool);  // Allocate a block
+    if (block1) {
+        std::cout << "Block allocated successfully!" << std::endl;
+    }
+
+    freeInPool(pool, block1);  // Free the block
+    cleanupMemoryPool(pool);  // Clean up the pool
+
+    return 0;
+}
