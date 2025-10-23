@@ -1,0 +1,47 @@
+__global__ void matrixMulShared(float* C, const float* A, const float* B, int N) {
+    // Shared memory allocation for sub-matrices of A and B
+    __shared__ float sharedA[16][16];
+    __shared__ float sharedB[16][16];
+
+    // Thread indices within the block
+    int tx = threadIdx.x;
+    int ty = threadIdx.y;
+
+    // Row and column of the output matrix element
+    int row = blockIdx.y * blockDim.y + ty;
+    int col = blockIdx.x * blockDim.x + tx;
+
+    float Cvalue = 0.0f;
+
+    // Loop over the tiles of the input matrices
+    for (int t = 0; t < (N + 15) / 16; ++t) {
+        // Load elements into shared memory
+        if (row < N && t * 16 + tx < N) {
+            sharedA[ty][tx] = A[row * N + t * 16 + tx];
+        } else {
+            sharedA[ty][tx] = 0.0f;
+        }
+
+        if (col < N && t * 16 + ty < N) {
+            sharedB[ty][tx] = B[(t * 16 + ty) * N + col];
+        } else {
+            sharedB[ty][tx] = 0.0f;
+        }
+
+        // Synchronize to ensure all threads have loaded their data
+        __syncthreads();
+
+        // Compute the partial product for the current tile
+        for (int k = 0; k < 16; ++k) {
+            Cvalue += sharedA[ty][k] * sharedB[k][tx];
+        }
+
+        // Synchronize to ensure all threads have finished computation
+        __syncthreads();
+    }
+
+    // Write the result to the output matrix
+    if (row < N && col < N) {
+        C[row * N + col] = Cvalue;
+    }
+}
