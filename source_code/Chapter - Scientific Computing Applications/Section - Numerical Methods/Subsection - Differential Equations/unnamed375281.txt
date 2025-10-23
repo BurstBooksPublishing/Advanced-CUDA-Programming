@@ -1,0 +1,15 @@
+__global__ void solve_diff_eq(float* u, float* du, float* result, 
+                               int n, float dt) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        // Euler's method for solving differential equations
+        result[idx] = u[idx] + dt * du[idx];
+    }
+}
+
+void launch_kernel(float* u, float* du, float* result, 
+                   int n, float dt) {
+    int blockSize = 256;
+    int numBlocks = (n + blockSize - 1) / blockSize;
+    solve_diff_eq<<>>(u, du, result, n, dt);
+}
