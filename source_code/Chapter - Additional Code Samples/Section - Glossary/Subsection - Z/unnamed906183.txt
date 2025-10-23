@@ -1,0 +1,61 @@
+#include 
+#include 
+
+// Kernel function to perform time-critical deterministic task
+__global__ void deterministicTask(float* input, float* output, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        // Perform a deterministic operation (e.g., simple arithmetic)
+        output[idx] = input[idx] * 2.0f + 1.0f;
+    }
+}
+
+int main() {
+    int N = 1024; // Number of elements
+    size_t size = N * sizeof(float);
+
+    // Allocate host memory
+    float* h_input = (float*)malloc(size);
+    float* h_output = (float*)malloc(size);
+
+    // Initialize input data
+    for (int i = 0; i < N; i++) {
+        h_input[i] = static_cast(i);
+    }
+
+    // Allocate device memory
+    float *d_input, *d_output;
+    cudaMalloc(&d_input, size);
+    cudaMalloc(&d_output, size);
+
+    // Copy input data to device
+    cudaMemcpy(d_input, h_input, size, cudaMemcpyHostToDevice);
+
+    // Define block and grid dimensions
+    int threadsPerBlock = 256;
+    int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
+
+    // Launch the kernel with deterministic execution
+    deterministicTask<<>>(d_input, d_output, N);
+
+    // Copy the result back to host
+    cudaMemcpy(h_output, d_output, size, cudaMemcpyDeviceToHost);
+
+    // Verify the result (optional)
+    for (int i = 0; i < N; i++) {
+        if (h_output[i] != h_input[i] * 2.0f + 1.0f) {
+            printf("Error at index %d: %f != %f\n", i, h_output[i], h_input[i] * 2.0f + 1.0f);
+            break;
+        }
+    }
+
+    // Free device memory
+    cudaFree(d_input);
+    cudaFree(d_output);
+
+    // Free host memory
+    free(h_input);
+    free(h_output);
+
+    return 0;
+}
