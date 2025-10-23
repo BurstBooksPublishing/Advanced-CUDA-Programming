@@ -1,0 +1,59 @@
+#include 
+#include 
+
+// Kernel to demonstrate occupancy-driven design
+__global__ void occupancyKernel(float* A, float* B, float* C, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        // Perform some computation
+        C[idx] = A[idx] + B[idx];
+    }
+}
+
+int main() {
+    int N = 1 << 20; // 1M elements
+    size_t size = N * sizeof(float);
+
+    // Allocate host memory
+    float *h_A = (float*)malloc(size);
+    float *h_B = (float*)malloc(size);
+    float *h_C = (float*)malloc(size);
+
+    // Initialize host arrays
+    for (int i = 0; i < N; i++) {
+        h_A[i] = static_cast(i);
+        h_B[i] = static_cast(i * 2);
+    }
+
+    // Allocate device memory
+    float *d_A, *d_B, *d_C;
+    cudaMalloc(&d_A, size);
+    cudaMalloc(&d_B, size);
+    cudaMalloc(&d_C, size);
+
+    // Copy data to device
+    cudaMemcpy(d_A, h_A, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, h_B, size, cudaMemcpyHostToDevice);
+
+    // Define block size and grid size
+    int blockSize = 256; // Optimal block size for occupancy
+    int gridSize = (N + blockSize - 1) / blockSize;
+
+    // Launch kernel
+    occupancyKernel<<>>(d_A, d_B, d_C, N);
+
+    // Copy result back to host
+    cudaMemcpy(h_C, d_C, size, cudaMemcpyDeviceToHost);
+
+    // Free device memory
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_C);
+
+    // Free host memory
+    free(h_A);
+    free(h_B);
+    free(h_C);
+
+    return 0;
+}
