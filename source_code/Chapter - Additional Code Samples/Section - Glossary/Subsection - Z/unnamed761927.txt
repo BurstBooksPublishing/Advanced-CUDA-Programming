@@ -1,0 +1,53 @@
+#include 
+#include 
+
+__global__ void kernel(int *data, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        data[idx] = data[idx] * 2; // Double each element
+    }
+}
+
+int main() {
+    int N = 1 << 20; // 1 Million elements
+    size_t size = N * sizeof(int);
+
+    // Allocate unified memory
+    int *data;
+    cudaMallocManaged(&data, size);
+
+    // Initialize data on the host
+    for (int i = 0; i < N; i++) {
+        data[i] = i;
+    }
+
+    // Launch kernel to modify data on the device
+    int blockSize = 256;
+    int numBlocks = (N + blockSize - 1) / blockSize;
+    kernel<<>>(data, N);
+
+    // Synchronize to ensure kernel completion
+    cudaDeviceSynchronize();
+
+    // Verify results on the host
+    bool success = true;
+    for (int i = 0; i < N; i++) {
+        if (data[i] != i * 2) {
+            success = false;
+            break;
+        }
+    }
+
+    if (success) {
+        std::cout << "Page migration and kernel execution successful!" 
+                  << std::endl;
+    } else {
+        std::cout << "Error in page migration or kernel execution!" 
+                  << std::endl;
+    }
+
+    // Free unified memory
+    cudaFree(data);
+
+    return 0;
+}
