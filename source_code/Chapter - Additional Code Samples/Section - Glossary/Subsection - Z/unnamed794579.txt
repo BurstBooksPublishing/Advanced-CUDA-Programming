@@ -1,0 +1,42 @@
+#include 
+#include 
+
+__global__ void childKernel(int *data, int idx) {
+    // Perform some computation in the child kernel
+    data[idx] = idx * idx;
+}
+
+__global__ void parentKernel(int *data, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        // Launch a child kernel from within the parent kernel
+        childKernel<<<1, 1>>>(data, idx);
+        
+        // Synchronize to ensure the child kernel completes
+        cudaDeviceSynchronize();
+    }
+}
+
+int main() {
+    int N = 10;
+    int *h_data = (int *)malloc(N * sizeof(int));
+    int *d_data;
+    cudaMalloc((void **)&d_data, N * sizeof(int));
+
+    // Launch the parent kernel
+    parentKernel<<<1, N>>>(d_data, N);
+
+    // Copy the result back to the host
+    cudaMemcpy(h_data, d_data, N * sizeof(int), cudaMemcpyDeviceToHost);
+
+    // Print the results
+    for (int i = 0; i < N; i++) {
+        printf("h_data[%d] = %d\n", i, h_data[i]);
+    }
+
+    // Free memory
+    free(h_data);
+    cudaFree(d_data);
+
+    return 0;
+}
