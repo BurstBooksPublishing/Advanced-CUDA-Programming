@@ -1,0 +1,13 @@
+__global__ void threadCoarseningKernel(float *input, float *output, int N) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x; // Thread ID
+    int stride = blockDim.x * gridDim.x; // Total threads in grid
+    float sum = 0.0f;
+
+    // Coarsening: Each thread processes multiple elements
+    for (int i = tid; i < N; i += stride) {
+        sum += input[i]; // Accumulate values
+    }
+
+    // Store the result in output
+    output[tid] = sum;
+}
