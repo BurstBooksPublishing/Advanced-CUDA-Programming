@@ -1,0 +1,14 @@
+__global__ void coalescedMemoryAccess(float* output, const float* input, int width) {
+    // Calculate the global thread index
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    // Ensure the thread is within the bounds of the input matrix
+    if (x < width && y < width) {
+        // Calculate the linear index for coalesced memory access
+        int index = y * width + x;
+
+        // Perform a simple operation (e.g., copy input to output)
+        output[index] = input[index];
+    }
+}
