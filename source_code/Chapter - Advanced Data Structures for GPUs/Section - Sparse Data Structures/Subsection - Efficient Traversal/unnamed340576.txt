@@ -1,0 +1,14 @@
+__global__ void sparseMatrixVectorMultiply(int *rowPtr, int *colIdx, 
+    float *values, float *vector, float *result, int numRows) {
+    int row = blockIdx.x * blockDim.x + threadIdx.x;
+    if (row < numRows) {
+        float sum = 0.0f;
+        int rowStart = rowPtr[row];
+        int rowEnd = rowPtr[row + 1];
+        // Efficient traversal of non-zero elements in the row
+        for (int i = rowStart; i < rowEnd; i++) {
+            sum += values[i] * vector[colIdx[i]];
+        }
+        result[row] = sum;
+    }
+}
