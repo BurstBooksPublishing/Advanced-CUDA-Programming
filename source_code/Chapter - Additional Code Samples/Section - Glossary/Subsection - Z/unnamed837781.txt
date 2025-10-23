@@ -1,0 +1,45 @@
+#include 
+#include 
+
+// Function to perform 1D FFT on GPU using cuFFT
+void performFFT(float* h_data, int N) {
+    // Allocate device memory
+    cufftComplex* d_data;
+    cudaMalloc((void**)&d_data, sizeof(cufftComplex) * N);
+
+    // Copy input data to device
+    cudaMemcpy(d_data, h_data, sizeof(cufftComplex) * N, cudaMemcpyHostToDevice);
+
+    // Create a 1D FFT plan
+    cufftHandle plan;
+    cufftPlan1d(&plan, N, CUFFT_C2C, 1);
+
+    // Execute the FFT
+    cufftExecC2C(plan, d_data, d_data, CUFFT_FORWARD);
+
+    // Copy the result back to host
+    cudaMemcpy(h_data, d_data, sizeof(cufftComplex) * N, cudaMemcpyDeviceToHost);
+
+    // Cleanup
+    cufftDestroy(plan);
+    cudaFree(d_data);
+}
+
+int main() {
+    const int N = 8; // Size of the FFT
+    cufftComplex h_data[N] = {
+        {1.0f, 0.0f}, {2.0f, 0.0f}, {3.0f, 0.0f}, {4.0f, 0.0f},
+        {5.0f, 0.0f}, {6.0f, 0.0f}, {7.0f, 0.0f}, {8.0f, 0.0f}
+    };
+
+    // Perform FFT
+    performFFT(h_data, N);
+
+    // Print the result
+    std::cout << "FFT Result:" << std::endl;
+    for (int i = 0; i < N; ++i) {
+        std::cout << "(" << h_data[i].x << ", " << h_data[i].y << ")" << std::endl;
+    }
+
+    return 0;
+}
