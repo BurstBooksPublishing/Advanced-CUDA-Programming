@@ -1,0 +1,53 @@
+// CUDA Memory Checking Tool Example
+#include 
+#include 
+
+#define CHECK(call) \
+{ \
+    const cudaError_t error = call; \
+    if (error != cudaSuccess) { \
+        printf("Error: %s:%d, ", __FILE__, __LINE__); \
+        printf("code:%d, reason: %s\n", error, cudaGetErrorString(error)); \
+        exit(1); \
+    } \
+}
+
+__global__ void kernel(int *d_array, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        d_array[idx] = idx; // Simple kernel to initialize array
+    }
+}
+
+int main() {
+    int N = 1024;
+    int *h_array = (int *)malloc(N * sizeof(int));
+    int *d_array;
+    
+    // Allocate device memory
+    CHECK(cudaMalloc((void **)&d_array, N * sizeof(int)));
+    
+    // Launch kernel
+    kernel<<<(N + 255) / 256, 256>>>(d_array, N);
+    
+    // Check for kernel launch errors
+    CHECK(cudaGetLastError());
+    
+    // Copy data back to host
+    CHECK(cudaMemcpy(h_array, d_array, N * sizeof(int), cudaMemcpyDeviceToHost));
+    
+    // Verify results
+    for (int i = 0; i < N; i++) {
+        if (h_array[i] != i) {
+            printf("Error: h_array[%d] = %d\n", i, h_array[i]);
+            break;
+        }
+    }
+    
+    // Free memory
+    CHECK(cudaFree(d_array));
+    free(h_array);
+    
+    printf("Memory check completed successfully.\n");
+    return 0;
+}
