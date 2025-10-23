@@ -1,0 +1,51 @@
+// CUDA C++ implementation of warp scheduling mechanisms
+
+__global__ void warpSchedulingKernel(int *data, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Ensure the thread index is within bounds
+    if (idx < N) {
+        // Simulate warp divergence with a conditional branch
+        if (idx % 2 == 0) {
+            // Even-indexed threads perform a simple operation
+            data[idx] = data[idx] * 2;
+        } else {
+            // Odd-indexed threads perform a different operation
+            data[idx] = data[idx] + 1;
+        }
+
+        // Synchronize threads within a warp to ensure proper execution order
+        __syncwarp();
+
+        // Further computation after synchronization
+        data[idx] = data[idx] - 1;
+    }
+}
+
+int main() {
+    const int N = 1024;
+    int h_data[N];
+    int *d_data;
+
+    // Initialize host data
+    for (int i = 0; i < N; ++i) {
+        h_data[i] = i;
+    }
+
+    // Allocate device memory
+    cudaMalloc(&d_data, N * sizeof(int));
+
+    // Copy data to device
+    cudaMemcpy(d_data, h_data, N * sizeof(int), cudaMemcpyHostToDevice);
+
+    // Launch kernel with 1 block and N threads
+    warpSchedulingKernel<<<1, N>>>(d_data, N);
+
+    // Copy data back to host
+    cudaMemcpy(h_data, d_data, N * sizeof(int), cudaMemcpyDeviceToHost);
+
+    // Free device memory
+    cudaFree(d_data);
+
+    return 0;
+}
