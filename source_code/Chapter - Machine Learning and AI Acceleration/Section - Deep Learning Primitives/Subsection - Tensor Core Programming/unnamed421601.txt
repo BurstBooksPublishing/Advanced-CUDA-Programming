@@ -1,0 +1,37 @@
+__global__ void tensorCoreMatMul(half *A, half *B, float *C, int M, int N, int K) {
+    // Declare shared memory for matrix tiles
+    __shared__ half sharedA[16][16];
+    __shared__ half sharedB[16][16];
+
+    // Declare accumulator for the result
+    float accum[4][4] = {0};
+
+    // Load tiles of A and B into shared memory
+    for (int i = 0; i < K; i += 16) {
+        __syncthreads();
+        for (int tx = threadIdx.x; tx < 16; tx += blockDim.x) {
+            for (int ty = threadIdx.y; ty < 16; ty += blockDim.y) {
+                sharedA[ty][tx] = A[(blockIdx.y * 16 + ty) * K + (i + tx)];
+                sharedB[ty][tx] = B[(i + ty) * N + (blockIdx.x * 16 + tx)];
+            }
+        }
+        __syncthreads();
+
+        // Perform matrix multiplication using Tensor Cores
+        asm volatile(
+            "mma.sync.aligned.m16n8k8.row.col.f32.f16.f16.f32 "
+            "{%0, %1, %2, %3}, {%4, %5, %6, %7}, {%8, %9}, {%10, %11, %12, %13};"
+            : "=f"(accum[0][0]), "=f"(accum[0][1]), "=f"(accum[0][2]), "=f"(accum[0][3])
+            : "r"(sharedA[0][0]), "r"(sharedA[0][1]), "r"(sharedA[0][2]), "r"(sharedA[0][3]),
+              "r"(sharedB[0][0]), "r"(sharedB[0][1]), "f"(accum[0][0]), "f"(accum[0][1]),
+              "f"(accum[0][2]), "f"(accum[0][3])
+        );
+    }
+
+    // Store the result back to global memory
+    for (int tx = threadIdx.x; tx < 4; tx += blockDim.x) {
+        for (int ty = threadIdx.y; ty < 4; ty += blockDim.y) {
+            C[(blockIdx.y * 16 + ty) * N + (blockIdx.x * 16 + tx)] = accum[ty][tx];
+        }
+    }
+}
