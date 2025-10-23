@@ -1,0 +1,34 @@
+// CUDA kernel to demonstrate page migration with unified memory
+__global__ void pageMigrationKernel(int *data, int N) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        // Access data in unified memory, triggering page migration if necessary
+        data[idx] = data[idx] * 2;
+    }
+}
+
+int main() {
+    int N = 1 << 20; // Size of the data array
+    int *data;
+    
+    // Allocate unified memory
+    cudaMallocManaged(&data, N * sizeof(int));
+    
+    // Initialize data on the host
+    for (int i = 0; i < N; i++) {
+        data[i] = i;
+    }
+    
+    // Launch kernel to process data
+    int blockSize = 256;
+    int numBlocks = (N + blockSize - 1) / blockSize;
+    pageMigrationKernel<<>>(data, N);
+    
+    // Synchronize to ensure kernel completion
+    cudaDeviceSynchronize();
+    
+    // Free unified memory
+    cudaFree(data);
+    
+    return 0;
+}
