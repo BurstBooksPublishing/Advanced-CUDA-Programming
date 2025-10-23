@@ -1,0 +1,41 @@
+// CUDA kernel to distribute memory across multiple GPUs
+__global__ void distributeMemory(float* data, int size, int gpuCount) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    int chunkSize = size / gpuCount;  // Calculate chunk size per GPU
+    int gpuId = tid / chunkSize;      // Determine which GPU handles this thread
+
+    if (gpuId < gpuCount && tid < size) {
+        // Perform memory distribution logic here
+        data[tid] = gpuId;  // Example: Assign GPU ID to each data element
+    }
+}
+
+// Host function to manage multi-GPU memory distribution
+void multiGPUMemoryDistribution(float* h_data, int size, int gpuCount) {
+    float* d_data[gpuCount];
+    size_t chunkSize = size / gpuCount * sizeof(float);
+
+    // Allocate memory and copy data to each GPU
+    for (int i = 0; i < gpuCount; i++) {
+        cudaSetDevice(i);
+        cudaMalloc(&d_data[i], chunkSize);
+        cudaMemcpy(d_data[i], h_data + i * chunkSize / sizeof(float), 
+                   chunkSize, cudaMemcpyHostToDevice);
+    }
+
+    // Launch kernel on each GPU
+    for (int i = 0; i < gpuCount; i++) {
+        cudaSetDevice(i);
+        distributeMemory<<<(chunkSize + 255) / 256, 256>>>(d_data[i], 
+                                                          chunkSize / sizeof(float), 
+                                                          gpuCount);
+    }
+
+    // Synchronize and copy data back to host
+    for (int i = 0; i < gpuCount; i++) {
+        cudaSetDevice(i);
+        cudaMemcpy(h_data + i * chunkSize / sizeof(float), d_data[i], 
+                   chunkSize, cudaMemcpyDeviceToHost);
+        cudaFree(d_data[i]);
+    }
+}
