@@ -1,0 +1,53 @@
+#include 
+#include 
+
+int main() {
+    // Initialize CUDA
+    cudaDeviceProp prop;
+    int device = 0;
+    cudaGetDeviceProperties(&prop, device);
+
+    // Check if the device supports stream priorities
+    if (prop.streamPrioritiesSupported == 0) {
+        std::cerr << "Stream priorities are not supported on this device." << std::endl;
+        return -1;
+    }
+
+    // Get the range of priority levels for streams
+    int priority_high, priority_low;
+    cudaDeviceGetStreamPriorityRange(&priority_low, &priority_high);
+
+    std::cout << "Stream priority range: low = " << priority_low 
+              << ", high = " << priority_high << std::endl;
+
+    // Create streams with different priorities
+    cudaStream_t stream_high, stream_low;
+    cudaStreamCreateWithPriority(&stream_high, cudaStreamNonBlocking, priority_high);
+    cudaStreamCreateWithPriority(&stream_low, cudaStreamNonBlocking, priority_low);
+
+    // Example kernel launch with different stream priorities
+    int num_elements = 1024;
+    float *d_data;
+    cudaMalloc(&d_data, num_elements * sizeof(float));
+
+    // Launch kernel on high-priority stream
+    kernel<<<1, num_elements, 0, stream_high>>>(d_data);
+    // Launch kernel on low-priority stream
+    kernel<<<1, num_elements, 0, stream_low>>>(d_data);
+
+    // Synchronize streams to ensure completion
+    cudaStreamSynchronize(stream_high);
+    cudaStreamSynchronize(stream_low);
+
+    // Clean up
+    cudaFree(d_data);
+    cudaStreamDestroy(stream_high);
+    cudaStreamDestroy(stream_low);
+
+    return 0;
+}
+
+__global__ void kernel(float *data) {
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    data[idx] = idx;  // Simple example kernel
+}
