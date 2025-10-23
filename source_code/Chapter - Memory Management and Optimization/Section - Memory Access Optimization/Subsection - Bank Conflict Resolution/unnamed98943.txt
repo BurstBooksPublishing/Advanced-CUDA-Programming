@@ -1,0 +1,23 @@
+__global__ void bankConflictFreeKernel(float* input, float* output, int width) {
+    // Calculate the row and column indices for the current thread
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Calculate the index in the input array
+    int index = row * width + col;
+
+    // Shared memory declaration with padding to avoid bank conflicts
+    __shared__ float sharedMem[32][32 + 1]; // Padding added to avoid bank conflicts
+
+    // Load data into shared memory with padding
+    sharedMem[threadIdx.y][threadIdx.x] = input[index];
+
+    // Synchronize threads to ensure all data is loaded into shared memory
+    __syncthreads();
+
+    // Perform some computation using shared memory
+    float result = sharedMem[threadIdx.y][threadIdx.x] * 2.0f;
+
+    // Store the result back to global memory
+    output[index] = result;
+}
