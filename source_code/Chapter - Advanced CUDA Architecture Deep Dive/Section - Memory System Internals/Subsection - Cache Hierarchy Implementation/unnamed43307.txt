@@ -1,0 +1,23 @@
+// CUDA kernel to demonstrate cache hierarchy utilization
+__global__ void cacheHierarchyKernel(float* input, float* output, int N) {
+    // Shared memory declaration for L1 cache optimization
+    __shared__ float sharedMem[256];
+
+    // Calculate thread ID and global memory index
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+
+    // Ensure thread operates within array bounds
+    if (tid < N) {
+        // Load data into shared memory (L1 cache)
+        sharedMem[threadIdx.x] = input[tid];
+
+        // Synchronize threads to ensure shared memory is populated
+        __syncthreads();
+
+        // Perform computation using shared memory
+        float result = sharedMem[threadIdx.x] * 2.0f;
+
+        // Store result back to global memory
+        output[tid] = result;
+    }
+}
