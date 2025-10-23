@@ -1,0 +1,42 @@
+#include 
+#include 
+
+namespace cg = cooperative_groups;
+
+__global__ void cooperative_group_kernel() {
+    // Create a cooperative group for the entire thread block
+    cg::thread_block block = cg::this_thread_block();
+    
+    // Create a warp-level cooperative group
+    cg::coalesced_group warp = cg::coalesced_threads();
+    
+    // Perform warp-level synchronization
+    warp.sync();
+    
+    // Example: Warp-level reduction
+    int lane_id = warp.thread_rank();
+    int value = lane_id; // Each thread contributes its lane ID
+    value = warp.shfl_down(value, 1); // Shuffle down by 1
+    if (lane_id == 0) {
+        printf("Warp-level reduction result: %d\n", value);
+    }
+    
+    // Perform block-level synchronization
+    block.sync();
+    
+    // Example: Block-level reduction
+    int block_value = block.thread_rank();
+    for (int i = block.size() / 2; i > 0; i /= 2) {
+        block_value += __shfl_down_sync(0xFFFFFFFF, block_value, i);
+    }
+    if (block.thread_rank() == 0) {
+        printf("Block-level reduction result: %d\n", block_value);
+    }
+}
+
+int main() {
+    // Launch the kernel with cooperative groups enabled
+    cooperative_group_kernel<<<1, 32>>>();
+    cudaDeviceSynchronize();
+    return 0;
+}
