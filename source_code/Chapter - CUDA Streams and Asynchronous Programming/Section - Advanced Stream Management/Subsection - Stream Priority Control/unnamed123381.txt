@@ -1,0 +1,38 @@
+// CUDA Stream Priority Control Example
+#include <cuda_runtime.h>
+#include <iostream>
+
+int main() {
+    // Initialize CUDA
+    cudaDeviceProp prop;
+    int device = 0;
+    cudaGetDevice(&device);
+    cudaGetDeviceProperties(&prop, device);
+
+    // Check if priority is supported
+    if (prop.streamPrioritiesSupported) {
+        // Create streams with different priorities
+        int low_priority, high_priority;
+        cudaDeviceGetStreamPriorityRange(&low_priority, &high_priority);
+
+        cudaStream_t low_priority_stream, high_priority_stream;
+        cudaStreamCreateWithPriority(&low_priority_stream, cudaStreamDefault, low_priority);
+        cudaStreamCreateWithPriority(&high_priority_stream, cudaStreamDefault, high_priority);
+
+        // Launch kernels with different priorities
+        kernel<<<1, 1, 0, low_priority_stream>>>();
+        kernel<<<1, 1, 0, high_priority_stream>>>();
+
+        // Synchronize streams
+        cudaStreamSynchronize(low_priority_stream);
+        cudaStreamSynchronize(high_priority_stream);
+
+        // Destroy streams
+        cudaStreamDestroy(low_priority_stream);
+        cudaStreamDestroy(high_priority_stream);
+    } else {
+        std::cerr << "Stream priorities not supported on this device." << std::endl;
+    }
+
+    return 0;
+}
