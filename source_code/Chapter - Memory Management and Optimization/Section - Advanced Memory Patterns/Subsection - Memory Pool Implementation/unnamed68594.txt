@@ -1,0 +1,30 @@
+// Memory Pool Implementation in CUDA
+#include <cuda_runtime.h>
+#include <iostream>
+
+#define POOL_SIZE 1024 * 1024 // 1MB memory pool
+
+__device__ char memoryPool[POOL_SIZE]; // Device memory pool
+__device__ size_t poolIndex = 0;       // Index to track memory allocation
+
+__device__ void* allocateFromPool(size_t size) {
+    if (poolIndex + size > POOL_SIZE) return nullptr; // Check if enough space
+    void* ptr = &memoryPool[poolIndex];              // Get pointer to memory
+    poolIndex += size;                                // Update pool index
+    return ptr;                                       // Return allocated memory
+}
+
+__global__ void kernelUsingMemoryPool() {
+    int* intArray = (int*)allocateFromPool(10 * sizeof(int)); // Allocate array
+    if (intArray) {
+        for (int i = 0; i < 10; ++i) {
+            intArray[i] = i; // Initialize array
+        }
+    }
+}
+
+int main() {
+    kernelUsingMemoryPool<<<1, 1>>>(); // Launch kernel
+    cudaDeviceSynchronize(); // Synchronize device
+    return 0;
+}
