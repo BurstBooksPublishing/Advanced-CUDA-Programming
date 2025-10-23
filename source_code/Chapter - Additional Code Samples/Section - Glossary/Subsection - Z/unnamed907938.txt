@@ -1,0 +1,43 @@
+#include 
+#include 
+#include 
+#include 
+
+__global__ void deadlineKernel(int *data, int N, int deadline_ms) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        auto start = std::chrono::high_resolution_clock::now();
+        // Simulate work by performing a computation
+        for (int i = 0; i < 1000; ++i) {
+            data[idx] += i;
+        }
+        auto end = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast(end - start).count();
+        if (duration > deadline_ms) {
+            printf("Thread %d missed deadline: %d ms\n", idx, (int)duration);
+        } else {
+            printf("Thread %d met deadline: %d ms\n", idx, (int)duration);
+        }
+    }
+}
+
+int main() {
+    const int N = 1024;
+    const int deadline_ms = 10; // Deadline in milliseconds
+    int *h_data = new int[N];
+    int *d_data;
+    cudaMalloc(&d_data, N * sizeof(int));
+    cudaMemset(d_data, 0, N * sizeof(int));
+
+    // Launch kernel with 1 block and N threads
+    deadlineKernel<<<1, N>>>(d_data, N, deadline_ms);
+
+    // Wait for GPU to finish before accessing on host
+    cudaDeviceSynchronize();
+
+    // Free memory
+    cudaFree(d_data);
+    delete[] h_data;
+
+    return 0;
+}
